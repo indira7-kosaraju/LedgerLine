@@ -5,7 +5,9 @@ const { requirePermission } = require('../middleware/authorize');
 const { requireAccountAccess } = require('../middleware/accountAccess');
 const validate = require('../middleware/validate');
 const { createAccountSchema, listAccountsQuerySchema, updateAccountStatusSchema } = require('../utils/schemas/account.schemas');
+const { statementQuerySchema } = require('../utils/schemas/transaction.schemas');
 const accountController = require('../controllers/account.controller');
+const ledgerController = require('../controllers/ledger.controller');
 
 const router = Router();
 
@@ -36,6 +38,14 @@ router.get(
   requirePermission('accounts:read:own', 'accounts:read:any'),
   requireAccountAccess('VIEW'),
   accountController.getBalance
+);
+
+router.get(
+  '/:id/statement',
+  requirePermission('accounts:read:own', 'accounts:read:any'),
+  requireAccountAccess('VIEW'),
+  validate(statementQuerySchema, 'query'),
+  ledgerController.statement
 );
 
 router.patch(

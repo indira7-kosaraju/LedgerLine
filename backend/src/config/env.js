@@ -5,7 +5,8 @@ require('dotenv').config({ quiet: true });
 const { z } = require('zod');
 
 const envSchema = z.object({
-  NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+  // Secure default: if NODE_ENV is not set, behave like production (no debug details in errors).
+  NODE_ENV: z.enum(['development', 'test', 'production']).default('production'),
   PORT: z.coerce.number().int().positive().default(4000),
   CORS_ORIGIN: z.string().min(1).default('http://localhost:5173'),
   DATABASE_URL: z

@@ -11,7 +11,7 @@ const prisma = new PrismaClient();
 // Withdrawal: customer (debit) → SYSTEM (credit)
 // So every transaction has a matching debit and credit, and
 // SUM(all account balances) is always 0 – the books always balance.
-const SYSTEM_ACCOUNT_NUMBER = 'LL-SYSTEM-EXTERNAL';
+const { SYSTEM_ACCOUNT_NUMBER } = require('../src/config/policy');
 
 const PASSWORD_RULE = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,72}$/;
 

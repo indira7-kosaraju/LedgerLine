@@ -9,6 +9,8 @@ const authRoutes = require('./routes/auth.routes');
 const adminRoutes = require('./routes/admin.routes');
 const auditLogRoutes = require('./routes/auditLog.routes');
 const accountRoutes = require('./routes/account.routes');
+const transactionRoutes = require('./routes/transaction.routes');
+const ledgerRoutes = require('./routes/ledger.routes');
 const notFound = require('./middleware/notFound');
 const errorHandler = require('./middleware/errorHandler');
 
@@ -47,6 +49,8 @@ app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/audit-logs', auditLogRoutes);
 app.use('/api/accounts', accountRoutes);
+app.use('/api/transactions', transactionRoutes);
+app.use('/api/ledger', ledgerRoutes);
 
 // These two must stay last.
 app.use(notFound);

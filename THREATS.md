@@ -13,9 +13,9 @@ Running list of threats and how each one is handled. Updated as features are bui
 | 7 | Cross-origin calls from untrusted websites | CORS restricted to `CORS_ORIGIN` | Done (Task 1) |
 | 8 | Password theft from database | bcrypt (cost 12); hash never returned by API; max 72 bytes enforced | Done (Task 3) |
 | 9 | Users accessing other users' accounts | `canAccessAccount` ownership check on the backend, refusals audited; unit tested | Done – account endpoints (Task 5), transactions (Task 6) |
-| 10 | Negative balances / partial transfers | DB CHECK constraint `balance >= 0` on customer accounts (Task 2); DB transactions + row locks (Task 6) | Partly done |
+| 10 | Negative balances / partial transfers | Single DB transaction per movement, `FOR UPDATE` row locks, balance check on locked row, DB CHECK `balance >= 0`; rollback tested | Done (Task 6) |
 | 11 | Duplicate payments from retried requests | Idempotency keys | Planned (Day 2) |
-| 12 | Race conditions on concurrent transfers | Consistent lock ordering + concurrency tests | Planned (Task 6 / Day 2) |
+| 12 | Race conditions / deadlocks on concurrent transfers | Locks taken in sorted id order; retry on 40P01/40001; smoke-tested (20 parallel withdrawals, 20 opposite transfers) | Done (Task 6) – formal tests Day 2 |
 | 13 | Ledger history tampered with (edit/delete entries) | PostgreSQL triggers block UPDATE/DELETE on `ledger_entries` and `audit_logs` | Done (Task 2) |
 | 14 | Invalid money values (0, negative, self-transfer) reach the DB | CHECK constraints: amount > 0, from ≠ to | Done (Task 2) |
 | 15 | Floating-point rounding errors on money | All amounts stored as BigInt paise | Done (Task 2) |
@@ -34,3 +34,13 @@ Running list of threats and how each one is handled. Updated as features are bui
 | 28 | Precision loss sending money as JSON numbers | Money sent as string paise + formatted value | Done (Task 5) |
 | 29 | Account spam | Max 5 accounts per user | Partial – count-then-insert race possible (Day 2) |
 | 30 | Status change racing with a money movement | Status update locks the row (`FOR UPDATE`) in a transaction | Done (Task 5) |
+| 31 | Moving money from someone else's account | Ownership checked on the **locked** row inside the transaction (ACCOUNT_HOLDER + owner only) | Done (Task 6) |
+| 32 | Malformed amounts (0, negative, decimals, `1e5`, huge) | Zod: integer or digit string → BigInt, > 0; policy limits per operation | Done (Task 6) |
+| 33 | Refused attempts leave no trace (rolled back with the transaction) | Refusals audited outside the transaction; validation failures on money routes audited too | Done (Task 6) |
+| 34 | Recipient balance leaked to sender | Transfer response only includes the caller's account balance | Done (Task 6) |
+| 35 | Ledger silently drifts from balances | `GET /api/ledger/verify` recomputes balances, per-txn balance, running balances, and Σ balances = 0 | Done (Task 6) |
+| 36 | Debug info (paths, code) leaked in errors | `NODE_ENV` now defaults to `production`; debug only when explicitly `development` | Done (Task 6) |
+| 37 | Duplicate money movement on client retry | Idempotency keys | **Not done – Day 2** |
+| 38 | SYSTEM account row is a lock hotspot (all deposits/withdrawals serialize on it) | Accepted for now; could shard SYSTEM accounts later | Known limitation |
+
+> **The system is not claimed to be fully secure.** Idempotency, formal concurrency tests and automated adversarial tests are Day 2 work.

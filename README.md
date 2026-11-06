@@ -58,6 +58,16 @@ Health check: `GET http://localhost:4000/api/health`
 | GET | /api/accounts/:id/balance | Owner, ADMIN, AUDITOR | Current balance |
 | PATCH | /api/accounts/:id/status | ADMIN | `{ "status": "FROZEN" \| "ACTIVE" \| "CLOSED", "reason"? }` |
 
+| GET | /api/accounts/:id/statement | Owner, ADMIN, AUDITOR | Ledger entries + credits/debits proof; `page`, `limit`, `from`, `to` |
+| POST | /api/transactions/deposit | ACCOUNT_HOLDER (own account) | `{ "accountId", "amountPaise", "description"? }` – max ₹1,00,000 |
+| POST | /api/transactions/withdraw | ACCOUNT_HOLDER (own account) | `{ "accountId", "amountPaise", "description"? }` |
+| POST | /api/transactions/transfer | ACCOUNT_HOLDER (own source) | `{ "fromAccountId", "toAccountId" \| "toAccountNumber", "amountPaise", "description"? }` |
+| GET | /api/transactions | Any role | Holder: own. Admin/Auditor: all. Filters `accountId`, `type` |
+| GET | /api/ledger/entries | ADMIN, AUDITOR | Raw ledger; filters `accountId`, `transactionId` |
+| GET | /api/ledger/verify | ADMIN, AUDITOR | Proves balances = ledger and Σ balances = 0 |
+
+Amounts are sent as **`amountPaise`** – whole paise, e.g. `500000` = ₹5,000.00.
+
 Money is returned as `{ "paise": "500000", "formatted": "₹5,000.00", "currency": "INR" }`.
 
 ## Roles
@@ -81,7 +91,7 @@ Run unit tests: `npm test`
 - [x] Task 3 – Authentication
 - [x] Task 4 – Role-based authorization
 - [x] Task 5 – Account APIs
-- [ ] Task 6 – Transaction APIs
+- [x] Task 6 – Transaction APIs
 
 > The system is **not** yet claimed to be secure. Idempotency, concurrency testing
 > and adversarial tests are planned for Day 2.

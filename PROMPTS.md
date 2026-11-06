@@ -169,3 +169,47 @@ GET /api/accounts/:id, GET /api/accounts/:id/balance; unique account numbers, ba
 **Related commit:** `feat: implement secure account management APIs`
 
 ---
+
+## Entry 6 – Task 6: Deposit, Withdrawal and Transfer APIs
+
+**Date:** 2026-11-06
+
+**Prompt used:** "task6" (continuing the Day 1 master prompt: deposit, withdraw, transfer, GET /api/transactions,
+GET /api/accounts/:id/statement; positive amounts, no floating point, PostgreSQL transactions, atomic transfers,
+no negative balances, backend permission checks, ledger entries, refused attempts audited, full rollback,
+money conservation, consistent lock order).
+
+**AI-generated solution:**
+- New migration: `ledger_entries.entryNumber` (BIGSERIAL) for strict per-account ordering.
+- `transaction.service.js` – one `moveMoney()` used by all three operations, inside one `prisma.$transaction`:
+  `SELECT ... FOR UPDATE` on both accounts **in sorted id order** → rule checks on locked rows → BigInt balance updates →
+  transaction row → DEBIT + CREDIT ledger entries → SUCCESS audit row (same transaction). Retry on deadlock/serialization errors.
+- Deposits come from / withdrawals go to the SYSTEM account, so every transaction is double-entry and total money is conserved.
+- Refusals (NOT_OWNER, INSUFFICIENT_FUNDS, ACCOUNT_NOT_ACTIVE, DESTINATION_NOT_FOUND, AMOUNT_EXCEEDS_LIMIT, SAME_ACCOUNT,
+  VALIDATION_ERROR) are audited **outside** the rolled-back transaction; unexpected errors are audited as ERROR.
+- Policy: max ₹1,00,000 per deposit, ₹5,00,000 per withdrawal/transfer (`src/config/policy.js`).
+- Amount input `amountPaise`: integer or digit string → BigInt; rejects 0, negatives, decimals, "1e5".
+- Transfer response returns only the sender's balance (never the recipient's).
+- `GET /api/transactions`, `GET /api/accounts/:id/statement` (with credits/debits proof), `GET /api/ledger/entries`,
+  `GET /api/ledger/verify` (balances = ledger, each txn balanced, running balances, sum of all balances = 0).
+
+**Problems found (actual observations):**
+- `prisma migrate dev` refused to run because the AI's shell is non-interactive (even with `--create-only`, due to a warning).
+  Generated the migration SQL with `prisma migrate diff` against a temporary shadow DB, reviewed it, applied with `prisma migrate deploy`.
+  (In my own VS Code terminal `npm run db:migrate` works normally.)
+- Prisma warned that `package.json#prisma` (seed config) is deprecated in Prisma 7 – fine on 6.19.3, revisit if upgrading.
+- **Real security issue found during the rollback test:** the 500 response contained a `debug` field with internal file paths
+  and code because `NODE_ENV` defaulted to `development` when unset. Changed the default to `production` (secure default);
+  local `.env` still sets `development`.
+- Tests run: 39-check end-to-end flow (Day 1 scenario ₹5,000 + ₹2,000 − ₹1,000 − ₹500 = ₹5,500; receiver +₹500; all refusal cases),
+  concurrency smoke test (20 parallel ₹1,000 withdrawals from ₹5,500 → exactly 5 succeeded, final ₹500; 20 opposite-direction
+  transfers → no deadlock), rollback test (forced the CREDIT insert to fail with a temporary trigger → 500, balances/txns/entries
+  unchanged), direct SQL tamper attempts (UPDATE/DELETE ledger blocked, negative balance blocked). `/api/ledger/verify` ok after all.
+- These are smoke tests, not the formal automated concurrency/adversarial suite (Day 2). Idempotency is not implemented yet.
+
+**My corrections:**
+- _(fill in after reviewing)_
+
+**Related commit:** `feat: implement deposit withdrawal and transfer APIs`
+
+---

@@ -131,6 +131,9 @@ model Transaction {
 // Append-only. Never updated or deleted (enforced by a database trigger).
 model LedgerEntry {
   id            String         @id @default(uuid()) @db.Uuid
+  // Global sequence number assigned at insert time (after the account row is locked),
+  // so entries for one account are strictly ordered – used by statements and verification.
+  entryNumber   BigInt         @unique @default(autoincrement())
   transactionId String         @db.Uuid
   accountId     String         @db.Uuid
   direction     EntryDirection
@@ -143,7 +146,7 @@ model LedgerEntry {
 
   // One debit and one credit per transaction – never two of the same kind.
   @@unique([transactionId, direction])
-  @@index([accountId, createdAt])
+  @@index([accountId, entryNumber])
   @@map("ledger_entries")
 }
 
