@@ -102,3 +102,38 @@ JWT generation, JWT middleware, current-user endpoint, validation, error handlin
 **Related commit:** `feat: implement JWT authentication and user registration`
 
 ---
+
+## Entry 4 – Task 4: Role-Based Authorization
+
+**Date:** 2026-11-06
+
+**Prompt used:** "task 4" (continuing the Day 1 master prompt: ADMIN / ACCOUNT_HOLDER / AUDITOR roles,
+middleware for roles and account ownership, never trust frontend authorization).
+
+**AI-generated solution:**
+- `src/config/permissions.js` – one permission matrix; routes ask for permissions, not roles.
+  ADMIN and AUDITOR can never move money (separation of duties); AUDITOR is read-only.
+- `requirePermission(...)` middleware – 403 + `AUTHZ_DENIED` audit row on refusal.
+- `accessControl.service.js` – `canAccessAccount(user, account, action)` (pure, unit-tested) for VIEW / MOVE_MONEY / MANAGE,
+  and `assertAccountAccess()` which loads the account, returns 404/403 and audits refusals. Ready for Tasks 5 and 6.
+- `requireAccountAccess(action)` route middleware.
+- Seed creates ADMIN and AUDITOR from `SEED_*` variables in `.env` (public registration can only create ACCOUNT_HOLDER).
+- Endpoints: `GET /api/audit-logs` (ADMIN, AUDITOR; filter `?outcome=REFUSED`), `GET /api/admin/users`,
+  `PATCH /api/admin/users/:id/status` (ADMIN; cannot change own status).
+- `validate()` extended to query and params (Express 5 `req.query` is read-only, so results go to `req.validatedQuery`).
+- 16 unit tests with Node's built-in test runner (`npm test`).
+
+**Problems found (actual observations):**
+- **Real bug caught by a unit test:** the first version of the ownership check was `account.ownerId === user.id`.
+  With both values `undefined`, JavaScript says `undefined === undefined` is `true`, so a malformed user object would
+  "own" a malformed account. Fixed by requiring `user.id` to be a non-empty string. Test now passes (16/16).
+- HTTP tests (16 cases) all returned the expected status. Deactivating a user made their existing token fail
+  immediately (401), confirming the "reload user on every request" design from Task 3.
+- Test user `ravi@example.com` was added to the local DB.
+
+**My corrections:**
+- _(fill in after reviewing)_
+
+**Related commit:** `feat: implement role-based authorization and account permissions`
+
+---

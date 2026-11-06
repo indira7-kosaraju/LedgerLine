@@ -6,6 +6,8 @@ const rateLimit = require('express-rate-limit');
 const env = require('./config/env');
 const healthRoutes = require('./routes/health.routes');
 const authRoutes = require('./routes/auth.routes');
+const adminRoutes = require('./routes/admin.routes');
+const auditLogRoutes = require('./routes/auditLog.routes');
 const notFound = require('./middleware/notFound');
 const errorHandler = require('./middleware/errorHandler');
 
@@ -37,6 +39,8 @@ app.use(
 
 app.use('/api/health', healthRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/audit-logs', auditLogRoutes);
 
 // These two must stay last.
 app.use(notFound);

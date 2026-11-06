@@ -12,7 +12,7 @@ Running list of threats and how each one is handled. Updated as features are bui
 | 6 | Large request bodies used for DoS | JSON body limit of 10 KB | Done (Task 1) |
 | 7 | Cross-origin calls from untrusted websites | CORS restricted to `CORS_ORIGIN` | Done (Task 1) |
 | 8 | Password theft from database | bcrypt (cost 12); hash never returned by API; max 72 bytes enforced | Done (Task 3) |
-| 9 | Users accessing other users' accounts | Ownership checks on backend | Planned (Task 4) |
+| 9 | Users accessing other users' accounts | `canAccessAccount` ownership check on the backend, refusals audited; unit tested | Done (Task 4) – wired to endpoints in Task 5/6 |
 | 10 | Negative balances / partial transfers | DB CHECK constraint `balance >= 0` on customer accounts (Task 2); DB transactions + row locks (Task 6) | Partly done |
 | 11 | Duplicate payments from retried requests | Idempotency keys | Planned (Day 2) |
 | 12 | Race conditions on concurrent transfers | Consistent lock ordering + concurrency tests | Planned (Task 6 / Day 2) |
@@ -25,3 +25,7 @@ Running list of threats and how each one is handled. Updated as features are bui
 | 19 | Email enumeration via login | Same error message for all failures; dummy bcrypt compare for unknown emails | Done (Task 3) |
 | 20 | Stale role / deactivated user still using old token | User re-loaded from DB on every authenticated request | Done (Task 3) |
 | 21 | Stolen token used until expiry | Short 1h expiry; no refresh/revocation yet | Partial – revocation not implemented |
+| 22 | Privilege escalation (holder calls admin/audit APIs) | Central permission matrix + `requirePermission` on every protected route; refusals audited | Done (Task 4) |
+| 23 | Admin/auditor moving money (insider fraud) | `transactions:create` and `MOVE_MONEY` granted to ACCOUNT_HOLDER only | Done (Task 4) |
+| 24 | Admin locks themselves out / hides own actions | Admin cannot change own status; all admin actions audited | Done (Task 4) |
+| 25 | Hard-coded admin credentials in code | ADMIN/AUDITOR created by seed from `.env` only | Done (Task 4) |

@@ -35,7 +35,7 @@ cd backend
 cp .env.example .env    # then edit .env with real values
 npm install             # also runs `prisma generate`
 npm run db:migrate      # create tables
-npm run db:seed         # create the SYSTEM account
+npm run db:seed         # create SYSTEM account + ADMIN/AUDITOR from .env
 npm run dev
 ```
 
@@ -49,13 +49,30 @@ Health check: `GET http://localhost:4000/api/health`
 | POST | /api/auth/register | – | Create ACCOUNT_HOLDER user, returns token |
 | POST | /api/auth/login | – | Returns token |
 | GET | /api/auth/me | Bearer | Current user profile |
+| GET | /api/audit-logs | ADMIN, AUDITOR | Audit trail; filters `outcome`, `action`, `actorId`, `entityId`, `page`, `limit` |
+| GET | /api/admin/users | ADMIN | List users; filter `role` |
+| PATCH | /api/admin/users/:id/status | ADMIN | `{ "isActive": false }` to deactivate |
+
+## Roles
+
+| Permission | ADMIN | ACCOUNT_HOLDER | AUDITOR |
+|---|:-:|:-:|:-:|
+| View own accounts | – | ✅ | – |
+| View all accounts | ✅ | – | ✅ |
+| Freeze / manage accounts | ✅ | – | – |
+| Deposit / withdraw / transfer | – | ✅ (own accounts) | – |
+| View all transactions & ledger | ✅ | – | ✅ |
+| View audit logs (incl. refused attempts) | ✅ | – | ✅ |
+| Manage users | ✅ | – | – |
+
+Run unit tests: `npm test`
 
 ## Status
 
 - [x] Task 1 – Project setup
 - [x] Task 2 – PostgreSQL + Prisma schema
 - [x] Task 3 – Authentication
-- [ ] Task 4 – Role-based authorization
+- [x] Task 4 – Role-based authorization
 - [ ] Task 5 – Account APIs
 - [ ] Task 6 – Transaction APIs
 
