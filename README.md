@@ -33,7 +33,9 @@ LedgerLine/
 ```bash
 cd backend
 cp .env.example .env    # then edit .env with real values
-npm install
+npm install             # also runs `prisma generate`
+npm run db:migrate      # create tables
+npm run db:seed         # create the SYSTEM account
 npm run dev
 ```
 
@@ -42,7 +44,7 @@ Health check: `GET http://localhost:4000/api/health`
 ## Status
 
 - [x] Task 1 – Project setup
-- [ ] Task 2 – PostgreSQL + Prisma schema
+- [x] Task 2 – PostgreSQL + Prisma schema
 - [ ] Task 3 – Authentication
 - [ ] Task 4 – Role-based authorization
 - [ ] Task 5 – Account APIs

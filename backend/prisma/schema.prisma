@@ -1,0 +1,194 @@
+// LedgerLine database schema.
+// All money amounts are stored as BigInt in paise (1 rupee = 100 paise).
+// Never store money as Float/Decimal-in-JS.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────── Enums ───────────────────────────
+
+enum Role {
+  ADMIN
+  ACCOUNT_HOLDER
+  AUDITOR
+}
+
+enum AccountType {
+  CUSTOMER // belongs to a user, can never go negative
+  SYSTEM // represents money outside LedgerLine (deposits come from here, withdrawals go here)
+}
+
+enum AccountStatus {
+  ACTIVE
+  FROZEN
+  CLOSED
+}
+
+enum TransactionType {
+  DEPOSIT
+  WITHDRAWAL
+  TRANSFER
+}
+
+enum TransactionStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+enum EntryDirection {
+  DEBIT // money leaves the account (balance goes down)
+  CREDIT // money enters the account (balance goes up)
+}
+
+enum IdempotencyStatus {
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum AuditOutcome {
+  SUCCESS
+  REFUSED
+  ERROR
+}
+
+// ─────────────────────────── Models ───────────────────────────
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  email        String   @unique
+  passwordHash String
+  fullName     String
+  role         Role     @default(ACCOUNT_HOLDER)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  accounts        Account[]
+  transactions    Transaction[]    @relation("InitiatedBy")
+  idempotencyKeys IdempotencyKey[]
+  auditLogs       AuditLog[]
+
+  @@index([role])
+  @@map("users")
+}
+
+model Account {
+  id            String        @id @default(uuid()) @db.Uuid
+  accountNumber String        @unique
+  type          AccountType   @default(CUSTOMER)
+  status        AccountStatus @default(ACTIVE)
+  currency      String        @default("INR") @db.Char(3)
+  // Cached balance in paise. Must always equal SUM(credits) - SUM(debits) in ledger_entries.
+  balance       BigInt        @default(0)
+  ownerId       String?       @db.Uuid // null only for SYSTEM accounts
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  owner         User?         @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  outgoing      Transaction[] @relation("FromAccount")
+  incoming      Transaction[] @relation("ToAccount")
+  ledgerEntries LedgerEntry[]
+
+  @@index([ownerId])
+  @@index([type])
+  @@map("accounts")
+}
+
+model Transaction {
+  id            String            @id @default(uuid()) @db.Uuid
+  reference     String            @unique // human-readable, e.g. TXN-20261106-AB12CD
+  type          TransactionType
+  status        TransactionStatus @default(PENDING)
+  amount        BigInt // paise, always > 0
+  currency      String            @default("INR") @db.Char(3)
+  fromAccountId String            @db.Uuid // account that is debited
+  toAccountId   String            @db.Uuid // account that is credited
+  initiatedById String            @db.Uuid
+  description   String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  fromAccount    Account         @relation("FromAccount", fields: [fromAccountId], references: [id], onDelete: Restrict)
+  toAccount      Account         @relation("ToAccount", fields: [toAccountId], references: [id], onDelete: Restrict)
+  initiatedBy    User            @relation("InitiatedBy", fields: [initiatedById], references: [id], onDelete: Restrict)
+  ledgerEntries  LedgerEntry[]
+  idempotencyKey IdempotencyKey?
+
+  @@index([fromAccountId, createdAt])
+  @@index([toAccountId, createdAt])
+  @@index([initiatedById, createdAt])
+  @@index([type, createdAt])
+  @@map("transactions")
+}
+
+// Append-only. Never updated or deleted (enforced by a database trigger).
+model LedgerEntry {
+  id            String         @id @default(uuid()) @db.Uuid
+  transactionId String         @db.Uuid
+  accountId     String         @db.Uuid
+  direction     EntryDirection
+  amount        BigInt // paise, always > 0
+  balanceAfter  BigInt // account balance right after this entry
+  createdAt     DateTime       @default(now())
+
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Restrict)
+  account     Account     @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  // One debit and one credit per transaction – never two of the same kind.
+  @@unique([transactionId, direction])
+  @@index([accountId, createdAt])
+  @@map("ledger_entries")
+}
+
+// Used on Day 2 to make retried requests safe (no double payments).
+model IdempotencyKey {
+  id             String            @id @default(uuid()) @db.Uuid
+  key            String // value of the Idempotency-Key header
+  userId         String            @db.Uuid
+  endpoint       String // e.g. POST /api/transactions/transfer
+  requestHash    String // SHA-256 of the request body, to detect key reuse with a different body
+  status         IdempotencyStatus @default(IN_PROGRESS)
+  responseStatus Int?
+  responseBody   Json?
+  transactionId  String?           @unique @db.Uuid
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  expiresAt      DateTime
+
+  user        User         @relation(fields: [userId], references: [id], onDelete: Restrict)
+  transaction Transaction? @relation(fields: [transactionId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, key])
+  @@index([expiresAt])
+  @@map("idempotency_keys")
+}
+
+// Append-only security log: successful actions AND refused attempts.
+model AuditLog {
+  id         String       @id @default(uuid()) @db.Uuid
+  actorId    String?      @db.Uuid // null for anonymous attempts (e.g. failed login)
+  action     String // e.g. AUTH_LOGIN, TXN_WITHDRAW
+  outcome    AuditOutcome
+  entityType String? // e.g. Account, Transaction
+  entityId   String?
+  reason     String? // why it was refused, e.g. INSUFFICIENT_FUNDS
+  metadata   Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime     @default(now())
+
+  actor User? @relation(fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([actorId, createdAt])
+  @@index([outcome, createdAt])
+  @@index([action, createdAt])
+  @@index([entityType, entityId])
+  @@map("audit_logs")
+}

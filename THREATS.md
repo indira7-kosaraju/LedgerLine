@@ -13,6 +13,10 @@ Running list of threats and how each one is handled. Updated as features are bui
 | 7 | Cross-origin calls from untrusted websites | CORS restricted to `CORS_ORIGIN` | Done (Task 1) |
 | 8 | Password theft from database | bcrypt hashing | Planned (Task 3) |
 | 9 | Users accessing other users' accounts | Ownership checks on backend | Planned (Task 4) |
-| 10 | Negative balances / partial transfers | DB transactions + row locks | Planned (Task 6) |
+| 10 | Negative balances / partial transfers | DB CHECK constraint `balance >= 0` on customer accounts (Task 2); DB transactions + row locks (Task 6) | Partly done |
 | 11 | Duplicate payments from retried requests | Idempotency keys | Planned (Day 2) |
 | 12 | Race conditions on concurrent transfers | Consistent lock ordering + concurrency tests | Planned (Task 6 / Day 2) |
+| 13 | Ledger history tampered with (edit/delete entries) | PostgreSQL triggers block UPDATE/DELETE on `ledger_entries` and `audit_logs` | Done (Task 2) |
+| 14 | Invalid money values (0, negative, self-transfer) reach the DB | CHECK constraints: amount > 0, from ≠ to | Done (Task 2) |
+| 15 | Floating-point rounding errors on money | All amounts stored as BigInt paise | Done (Task 2) |
+| 16 | App compromise gives full DB control | App connects as dedicated `ledgerline_app` role, not the superuser | Done (Task 2) |
