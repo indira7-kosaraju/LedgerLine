@@ -70,3 +70,35 @@ indexes, timestamps; money in integer paise).
 **Related commit:** `feat: configure PostgreSQL database and Prisma schema`
 
 ---
+
+## Entry 3 – Task 3: JWT Authentication
+
+**Date:** 2026-11-06
+
+**Prompt used:** "task 3" (continuing the Day 1 master prompt: registration, login, bcrypt hashing,
+JWT generation, JWT middleware, current-user endpoint, validation, error handling).
+
+**AI-generated solution:**
+- `POST /api/auth/register`, `POST /api/auth/login`, `GET /api/auth/me`.
+- Zod schemas with `strictObject` (unknown fields like `role` are rejected), email trimmed + lowercased,
+  password rules (8+ chars, upper/lower/digit, max 72 bytes because bcrypt truncates after 72 bytes).
+- bcrypt cost 12; registration always creates `ACCOUNT_HOLDER`.
+- JWT: HS256 pinned, issuer + audience checked, 1h expiry, user id in `sub`.
+- `authenticate` middleware re-loads the user from the DB on each request (role/deactivation take effect immediately).
+- Login uses a dummy bcrypt hash for unknown emails so timing doesn't reveal which emails exist; same error message for all failures.
+- Login limiter (10 failed attempts / 15 min / IP), register limiter (10 / hour / IP).
+- Audit log rows for register/login success and refusal (EMAIL_TAKEN, WRONG_PASSWORD, UNKNOWN_EMAIL, USER_INACTIVE). Passwords never logged.
+
+**Problems found (actual observations):**
+- None blocking. Tested 13 cases with curl (valid/duplicate register, `role: ADMIN` injection, weak password,
+  wrong password, unknown email, empty body, valid/missing/tampered/wrong-secret/`alg:none` tokens) – all returned the expected status.
+- Timing check: wrong-password vs unknown-email both ~0.2 s. Rate limit returned 429 on the 11th failed login.
+- Note: rate-limit counters are in memory, so they reset when the server restarts (fine for Day 1; would need Redis in production).
+- A test user `asha@example.com` was left in the local DB from these tests.
+
+**My corrections:**
+- _(fill in after reviewing)_
+
+**Related commit:** `feat: implement JWT authentication and user registration`
+
+---

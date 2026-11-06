@@ -41,11 +41,20 @@ npm run dev
 
 Health check: `GET http://localhost:4000/api/health`
 
+## API
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| GET | /api/health | – | Server + DB status |
+| POST | /api/auth/register | – | Create ACCOUNT_HOLDER user, returns token |
+| POST | /api/auth/login | – | Returns token |
+| GET | /api/auth/me | Bearer | Current user profile |
+
 ## Status
 
 - [x] Task 1 – Project setup
 - [x] Task 2 – PostgreSQL + Prisma schema
-- [ ] Task 3 – Authentication
+- [x] Task 3 – Authentication
 - [ ] Task 4 – Role-based authorization
 - [ ] Task 5 – Account APIs
 - [ ] Task 6 – Transaction APIs

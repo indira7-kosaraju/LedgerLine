@@ -5,6 +5,7 @@ const rateLimit = require('express-rate-limit');
 
 const env = require('./config/env');
 const healthRoutes = require('./routes/health.routes');
+const authRoutes = require('./routes/auth.routes');
 const notFound = require('./middleware/notFound');
 const errorHandler = require('./middleware/errorHandler');
 
@@ -22,7 +23,7 @@ app.use(cors({ origin: env.CORS_ORIGIN.split(',').map((o) => o.trim()) }));
 app.use(express.json({ limit: '10kb' }));
 
 // Global rate limit: max 100 requests per IP per 15 minutes.
-// Stricter limits for login/register will be added in Task 3.
+// Login and register have their own stricter limits (see auth.routes.js).
 app.use(
   '/api',
   rateLimit({
@@ -35,6 +36,7 @@ app.use(
 );
 
 app.use('/api/health', healthRoutes);
+app.use('/api/auth', authRoutes);
 
 // These two must stay last.
 app.use(notFound);
