@@ -137,3 +137,35 @@ middleware for roles and account ownership, never trust frontend authorization).
 **Related commit:** `feat: implement role-based authorization and account permissions`
 
 ---
+
+## Entry 5 – Task 5: Account Management APIs
+
+**Date:** 2026-11-06
+
+**Prompt used:** "task 5" (continuing the Day 1 master prompt: POST /api/accounts, GET /api/accounts,
+GET /api/accounts/:id, GET /api/accounts/:id/balance; unique account numbers, balances, ownership, status codes).
+
+**AI-generated solution:**
+- Account numbers `LL` + 10 digits from `crypto.randomInt`; DB unique constraint + retry on collision.
+- `POST /api/accounts` (ACCOUNT_HOLDER only): owner = logged-in user, balance always starts at 0, body rejects `balance`/`ownerId`, INR only, max 5 accounts per user.
+- `GET /api/accounts`: holders see only their own (ownerId filter ignored); ADMIN/AUDITOR see all with filters.
+- `GET /api/accounts/:id` and `/balance`: `requirePermission` + `requireAccountAccess('VIEW')` (403 not owner, 404 missing, 400 bad uuid).
+- Extra: `PATCH /api/accounts/:id/status` (ADMIN) to freeze/unfreeze/close, inside a DB transaction with `SELECT ... FOR UPDATE`;
+  closed accounts can't reopen; closing requires zero balance; SYSTEM account can't be managed.
+- Money sent as `{ paise: "500000", formatted: "₹5,000.00", currency: "INR" }` – paise as string because BigInt can't be JSON-serialized
+  and large numbers lose precision as JSON numbers. Global `json replacer` as a safety net.
+
+**Problems found (actual observations):**
+- `JSON.stringify` throws on BigInt – handled by explicit serialization plus a global replacer.
+- **My own test was wrong, not the code:** the unit test for formatting 2^63−1 paise expected `₹9,22,33,...775.07`,
+  but the correct value is `₹92,23,37,20,36,85,47,758.07`. Verified with `Intl.NumberFormat('en-IN')` and fixed the test (now 20/20 pass).
+- Known limitation: the 5-account limit is checked with a count before insert, so two simultaneous requests could both pass and
+  create a 6th account. Low impact (not money), noted for Day 2 concurrency work.
+- 24 HTTP cases tested (create, mass-assignment, USD, admin/auditor create, ownership 403s, SYSTEM 403, 404, bad uuid, freeze/unfreeze, limit) – all as expected.
+
+**My corrections:**
+- _(fill in after reviewing)_
+
+**Related commit:** `feat: implement secure account management APIs`
+
+---

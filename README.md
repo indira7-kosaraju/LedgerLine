@@ -52,6 +52,13 @@ Health check: `GET http://localhost:4000/api/health`
 | GET | /api/audit-logs | ADMIN, AUDITOR | Audit trail; filters `outcome`, `action`, `actorId`, `entityId`, `page`, `limit` |
 | GET | /api/admin/users | ADMIN | List users; filter `role` |
 | PATCH | /api/admin/users/:id/status | ADMIN | `{ "isActive": false }` to deactivate |
+| POST | /api/accounts | ACCOUNT_HOLDER | Create account (max 5), starts at ₹0 |
+| GET | /api/accounts | Any role | Holder: own accounts. Admin/Auditor: all, filters `ownerId`, `status`, `type` |
+| GET | /api/accounts/:id | Owner, ADMIN, AUDITOR | Account details |
+| GET | /api/accounts/:id/balance | Owner, ADMIN, AUDITOR | Current balance |
+| PATCH | /api/accounts/:id/status | ADMIN | `{ "status": "FROZEN" \| "ACTIVE" \| "CLOSED", "reason"? }` |
+
+Money is returned as `{ "paise": "500000", "formatted": "₹5,000.00", "currency": "INR" }`.
 
 ## Roles
 
@@ -73,7 +80,7 @@ Run unit tests: `npm test`
 - [x] Task 2 – PostgreSQL + Prisma schema
 - [x] Task 3 – Authentication
 - [x] Task 4 – Role-based authorization
-- [ ] Task 5 – Account APIs
+- [x] Task 5 – Account APIs
 - [ ] Task 6 – Transaction APIs
 
 > The system is **not** yet claimed to be secure. Idempotency, concurrency testing
