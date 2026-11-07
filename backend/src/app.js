@@ -27,10 +27,22 @@ app.set('json replacer', (key, value) => (typeof value === 'bigint' ? value.toSt
 // Security headers (also removes the "X-Powered-By: Express" header).
 app.use(helmet());
 
-// Only our frontend origin may call the API from a browser.
-// credentials: true lets the browser send the HttpOnly session cookie – allowed
-// ONLY for the exact origins listed (never "*").
-app.use(cors({ origin: env.CORS_ORIGIN.split(',').map((o) => o.trim()), credentials: true }));
+// CORS: which websites may call this API from a browser.
+// - origin: ONLY the exact frontend origins from .env (validated in config/env.js – never "*")
+// - credentials: lets the browser send the HttpOnly session cookie (only to those origins)
+// - allowedHeaders: only the headers our frontend actually sends
+// - exposedHeaders: lets the frontend read Retry-After on 429 responses
+// - maxAge: browsers may cache the preflight answer for 10 minutes
+app.use(
+  cors({
+    origin: env.CORS_ORIGIN,
+    credentials: true,
+    methods: ['GET', 'POST', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'X-Requested-With', 'Authorization', 'X-Auth-Mode', 'Idempotency-Key'],
+    exposedHeaders: ['Retry-After'],
+    maxAge: 600,
+  })
+);
 
 // Parse JSON bodies; reject anything over 10 KB to limit abuse.
 app.use(express.json({ limit: '10kb' }));

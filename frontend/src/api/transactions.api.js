@@ -1,5 +1,5 @@
 import { api } from './client'
-import { cleanParams } from './accounts.api'
+import { cleanParams } from './params'
 
 // GET /api/transactions → { items, page, limit, total }
 // Account holders get only their own; admins and auditors get all.

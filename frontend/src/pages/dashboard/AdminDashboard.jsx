@@ -33,6 +33,9 @@ export default function AdminDashboard() {
             <Link to="/accounts" className={buttonClasses('primary')}>
               Manage accounts
             </Link>
+            <Link to="/admin/users" className={buttonClasses('secondary')}>
+              Manage users
+            </Link>
             <Link to="/audit-logs" className={buttonClasses('secondary')}>
               Audit logs
             </Link>

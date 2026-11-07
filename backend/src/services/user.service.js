@@ -3,8 +3,16 @@ const AppError = require('../utils/AppError');
 const { publicUserFields } = require('./auth.service');
 const audit = require('./audit.service');
 
-async function listUsers({ page, limit, role }) {
-  const where = role ? { role } : {};
+async function listUsers({ page, limit, role, status, q }) {
+  const where = {};
+  if (role) where.role = role;
+  if (status) where.isActive = status === 'ACTIVE';
+  if (q) {
+    where.OR = [
+      { email: { contains: q, mode: 'insensitive' } },
+      { fullName: { contains: q, mode: 'insensitive' } },
+    ];
+  }
   const [items, total] = await Promise.all([
     prisma.user.findMany({
       where,

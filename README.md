@@ -60,7 +60,7 @@ npm run dev             # http://localhost:5173 – the backend must be running 
 | POST | /api/auth/logout | – | Clears the session cookie (204) |
 | GET | /api/auth/me | Bearer | Current user profile |
 | GET | /api/audit-logs | ADMIN, AUDITOR | Audit trail; filters `outcome`, `action`, `actionPrefix`, `actorId`, `entityId`, `page`, `limit` |
-| GET | /api/admin/users | ADMIN | List users; filter `role` |
+| GET | /api/admin/users | ADMIN | List users; filters `role`, `status` (ACTIVE/INACTIVE), `q` (name/email) |
 | PATCH | /api/admin/users/:id/status | ADMIN | `{ "isActive": false }` to deactivate |
 | POST | /api/accounts | ACCOUNT_HOLDER | Create account (max 5), starts at ₹0 |
 | GET | /api/accounts | Any role | Holder: own accounts. Admin/Auditor: all, filters `ownerId`, `status`, `type`. Search `q`. Returns `summary.totalBalance` |
@@ -80,6 +80,29 @@ npm run dev             # http://localhost:5173 – the backend must be running 
 Amounts are sent as **`amountPaise`** – whole paise, e.g. `500000` = ₹5,000.00.
 
 Money is returned as `{ "paise": "500000", "formatted": "₹5,000.00", "currency": "INR" }`.
+
+## Frontend ↔ backend integration
+
+| Backend endpoint | Frontend function (`frontend/src/api/`) | Used on |
+|---|---|---|
+| GET /health | `getHealth` (health.api) | Home – system status |
+| POST /auth/register, /auth/login, /auth/logout, GET /auth/me | `register`, `login`, `logout`, `getCurrentUser` (auth.api) | Register, Sign in, sidebar, session restore |
+| POST /accounts | `createAccount` | Dashboard, Accounts |
+| GET /accounts | `listAccounts` | Dashboards, Accounts, money forms, history filter |
+| GET /accounts/:id | `getAccount` | Account details |
+| GET /accounts/:id/balance | `getBalance` | Account details – Refresh |
+| GET /accounts/:id/statement | `getStatement` | Account details – statement |
+| PATCH /accounts/:id/status | `updateAccountStatus` | Account details (admin) |
+| POST /transactions/deposit, /withdraw, /transfer | `deposit`, `withdraw`, `transfer` (transactions.api) | Deposit / Withdraw / Transfer |
+| GET /transactions | `listTransactions` | Dashboards, Transactions |
+| GET /transactions/:id | `getTransaction` | Transaction details |
+| GET /ledger/entries, /ledger/verify | `listLedgerEntries`, `verifyLedger` (oversight.api) | Ledger, admin/auditor dashboards |
+| GET /audit-logs | `listAuditLogs` | Audit logs, dashboards |
+| GET /admin/users, PATCH /admin/users/:id/status | `listUsers`, `updateUserStatus` | Users (admin), admin dashboard |
+
+Error handling: every request goes through `api/client.js`, which turns failures into `ApiError { status, code, message }`.
+401 → signed out and sent to sign-in (then back to the same page); 403 → "Access denied"; 400 → messages under the fields;
+404 → "Not found"; 429 → "try again in N seconds"; 500 / network → "Try again" button; page crashes → error card.
 
 ## Authentication modes
 
@@ -114,7 +137,7 @@ Day 2:
 - [x] Task 2 – Login and registration
 - [x] Task 3 – Role-based dashboards
 - [x] Task 4 – Money movement pages
-- [ ] Task 5 – Backend integration
+- [x] Task 5 – Backend integration
 - [ ] Task 6 – Idempotency
 - [ ] Task 7 – Concurrency and ledger security
 - [ ] Task 8 – Testing and final review

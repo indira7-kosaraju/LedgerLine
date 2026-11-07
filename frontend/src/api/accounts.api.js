@@ -1,9 +1,5 @@
 import { api } from './client'
-
-// Removes empty filters so the URL stays clean: { status: '' } → {}
-export function cleanParams(params = {}) {
-  return Object.fromEntries(Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== ''))
-}
+import { cleanParams } from './params'
 
 // GET /api/accounts → { items, page, limit, total, summary: { totalBalance } }
 export async function listAccounts(params, { signal } = {}) {
@@ -14,6 +10,12 @@ export async function listAccounts(params, { signal } = {}) {
 export async function getAccount(id, { signal } = {}) {
   const { data } = await api.get(`/accounts/${encodeURIComponent(id)}`, { signal })
   return data.account
+}
+
+// GET /api/accounts/:id/balance → { accountId, accountNumber, status, balance, asOf }
+export async function getBalance(id, { signal } = {}) {
+  const { data } = await api.get(`/accounts/${encodeURIComponent(id)}/balance`, { signal })
+  return data
 }
 
 // GET /api/accounts/:id/statement → { account, summary, entries, page, limit, total }

@@ -1,5 +1,5 @@
 import { api } from './client'
-import { cleanParams } from './accounts.api'
+import { cleanParams } from './params'
 
 // Admin and auditor APIs. The backend returns 403 for any other role.
 
@@ -25,7 +25,14 @@ export async function verifyLedger({ signal } = {}) {
 }
 
 // GET /api/admin/users → { items, page, limit, total }   (ADMIN only)
+// Filters: role, status ('ACTIVE' | 'INACTIVE'), q (name or email)
 export async function listUsers(params, { signal } = {}) {
   const { data } = await api.get('/admin/users', { params: cleanParams(params), signal })
   return data
+}
+
+// PATCH /api/admin/users/:id/status → { user }   (ADMIN only; an admin cannot change their own status)
+export async function updateUserStatus(id, isActive) {
+  const { data } = await api.patch(`/admin/users/${encodeURIComponent(id)}/status`, { isActive })
+  return data.user
 }

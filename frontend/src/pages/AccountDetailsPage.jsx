@@ -4,7 +4,7 @@ import { useAuth } from '../hooks/useAuth'
 import { useApi } from '../hooks/useApi'
 import { useToast } from '../hooks/useToast'
 import { useQueryParams } from '../hooks/useQueryParams'
-import { getAccount, getStatement, updateAccountStatus } from '../api/accounts.api'
+import { getAccount, getBalance, getStatement, updateAccountStatus } from '../api/accounts.api'
 import { can } from '../config/roles'
 import { formatDateTime, humanize } from '../utils/format'
 import PageHeader from '../components/ui/PageHeader'
@@ -118,6 +118,8 @@ export default function AccountDetailsPage() {
 
   const account = useApi((opts) => getAccount(id, opts), [id])
   const statement = useApi((opts) => getStatement(id, { page, limit: LIMIT }, opts), [id, page])
+  // Fresh balance straight from GET /accounts/:id/balance (the Refresh button re-reads it).
+  const balance = useApi((opts) => getBalance(id, opts), [id])
 
   if (account.error) {
     return (
@@ -137,7 +139,9 @@ export default function AccountDetailsPage() {
   const reloadAll = () => {
     account.reload()
     statement.reload()
+    balance.reload()
   }
+  const current = balance.data ?? { balance: a.balance, asOf: null }
 
   return (
     <>
@@ -155,8 +159,14 @@ export default function AccountDetailsPage() {
       <div className="grid gap-6 lg:grid-cols-3">
         <Card>
           <CardBody>
-            <p className="text-sm font-medium text-slate-500">Current balance</p>
-            <p className="mt-1 text-3xl font-semibold tabular-nums tracking-tight text-slate-900">{a.balance.formatted}</p>
+            <div className="flex items-start justify-between gap-2">
+              <p className="text-sm font-medium text-slate-500">Current balance</p>
+              <Button variant="ghost" size="sm" onClick={reloadAll} loading={balance.loading} aria-label="Refresh balance">
+                Refresh
+              </Button>
+            </div>
+            <p className="mt-1 text-3xl font-semibold tabular-nums tracking-tight text-slate-900">{current.balance.formatted}</p>
+            {current.asOf && <p className="mt-1 text-xs text-slate-500">As of {formatDateTime(current.asOf)}</p>}
             <div className="mt-3">
               <AccountStatusBadge status={a.status} />
             </div>

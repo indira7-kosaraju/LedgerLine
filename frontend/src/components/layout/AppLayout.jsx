@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { NavLink, Outlet } from 'react-router'
+import { NavLink, Outlet, useLocation } from 'react-router'
+import ErrorBoundary from '../ErrorBoundary'
 import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../../hooks/useToast'
 import { navItemsFor } from '../../config/navigation'
@@ -63,6 +64,7 @@ function SidebarContent({ onNavigate }) {
 export default function AppLayout() {
   const [menuOpen, setMenuOpen] = useState(false)
   const closeMenu = () => setMenuOpen(false)
+  const location = useLocation()
 
   // Escape closes the mobile menu.
   useEffect(() => {
@@ -106,7 +108,10 @@ export default function AppLayout() {
 
       <main className="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
         <div className="mx-auto max-w-7xl">
-          <Outlet />
+          {/* A crash in one page shows an error card instead of a blank app; resets on navigation. */}
+          <ErrorBoundary key={location.pathname}>
+            <Outlet />
+          </ErrorBoundary>
         </div>
       </main>
     </div>

@@ -29,7 +29,13 @@ function toApiError(error) {
     return new ApiError({ status: 0, code: 'CANCELED', message: 'Request was canceled' })
   }
   if (error.response) {
-    const { status, data } = error.response
+    const { status, data, headers } = error.response
+    // Rate limited: tell the user how long to wait (Retry-After is in seconds).
+    if (status === 429) {
+      const seconds = Number.parseInt(headers?.['retry-after'], 10)
+      const wait = Number.isFinite(seconds) ? `in ${seconds < 120 ? `${seconds} seconds` : `${Math.ceil(seconds / 60)} minutes`}` : 'in a moment'
+      return new ApiError({ status, code: data?.error?.code ?? 'RATE_LIMITED', message: `Too many requests. Please try again ${wait}.` })
+    }
     return new ApiError({
       status,
       code: data?.error?.code ?? `HTTP_${status}`,

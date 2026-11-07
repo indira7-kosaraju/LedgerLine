@@ -10,7 +10,7 @@ Running list of threats and how each one is handled. Updated as features are bui
 | 4 | Brute force / request flooding | Global limit 100 req / 15 min; login 10 failed / 15 min; register 10 / hour (per IP, in-memory) | Done (Task 3) – in-memory only |
 | 5 | Common HTTP header attacks (clickjacking, MIME sniffing) | Helmet security headers | Done (Task 1) |
 | 6 | Large request bodies used for DoS | JSON body limit of 10 KB | Done (Task 1) |
-| 7 | Cross-origin calls from untrusted websites | CORS restricted to `CORS_ORIGIN` | Done (Task 1) |
+| 7 | Cross-origin calls from untrusted websites | CORS: exact origins only ("*" rejected at startup), explicit methods + headers, `Vary: Origin` | Done (Day 2 Task 5) |
 | 8 | Password theft from database | bcrypt (cost 12); hash never returned by API; max 72 bytes enforced | Done (Task 3) |
 | 9 | Users accessing other users' accounts | `canAccessAccount` ownership check on the backend, refusals audited; unit tested | Done – account endpoints (Task 5), transactions (Task 6) |
 | 10 | Negative balances / partial transfers | Single DB transaction per movement, `FOR UPDATE` row locks, balance check on locked row, DB CHECK `balance >= 0`; rollback tested | Done (Task 6) |
@@ -57,5 +57,9 @@ Running list of threats and how each one is handled. Updated as features are bui
 | 48 | Floating-point errors from typed amounts | Amount parsed as text (decimal point moved as a string) and sent as paise; backend re-validates | Done (Day 2 Task 4) |
 | 49 | Accidental double submission (double-click) | Confirm button disabled while the request runs (tested: one transaction) – **UI only**, real protection is idempotency | Partial – Task 6 |
 | 50 | User retries after a timeout and pays twice | UI warns "may or may not have gone through" and links to history | Partial – Task 6 (idempotency) |
+
+| 51 | Misconfigured `CORS_ORIGIN="*"` with cookies exposes sessions to any site | Env validation refuses to start with `*`, paths or trailing slashes | Done (Day 2 Task 5) |
+| 52 | A rendering bug blanks the whole app | `ErrorBoundary` per page; nothing sensitive is sent anywhere | Done (Day 2 Task 5) |
+| 53 | Deactivated user keeps using an open browser session | Backend rejects on the next request (401); UI signs them out – tested | Done (Day 2 Task 5) |
 
 > **The system is not claimed to be fully secure.** Idempotency, formal concurrency tests and automated adversarial tests are Day 2 work.

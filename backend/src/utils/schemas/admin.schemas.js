@@ -4,6 +4,9 @@ const { paginationSchema } = require('./common.schemas');
 const listUsersQuerySchema = z.strictObject({
   ...paginationSchema,
   role: z.enum(['ADMIN', 'ACCOUNT_HOLDER', 'AUDITOR']).optional(),
+  status: z.enum(['ACTIVE', 'INACTIVE']).optional(),
+  // Search by name or email
+  q: z.string().trim().min(1).max(64).optional(),
 });
 
 const updateUserStatusSchema = z.strictObject({

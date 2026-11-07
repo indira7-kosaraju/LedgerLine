@@ -15,6 +15,7 @@ import AuditLogsPage from './pages/AuditLogsPage'
 import TransactionsPage from './pages/TransactionsPage'
 import TransactionDetailsPage from './pages/TransactionDetailsPage'
 import MoneyMovementPage from './pages/MoneyMovementPage'
+import AdminUsersPage from './pages/AdminUsersPage'
 import LedgerPage from './pages/LedgerPage'
 import ForbiddenPage from './pages/ForbiddenPage'
 import NotFoundPage from './pages/NotFoundPage'
@@ -46,6 +47,11 @@ export default function App() {
                 <Route element={<ProtectedRoute roles={['ADMIN', 'AUDITOR']} />}>
                   <Route path="ledger" element={<LedgerPage />} />
                   <Route path="audit-logs" element={<AuditLogsPage />} />
+                </Route>
+
+                {/* Admin only */}
+                <Route element={<ProtectedRoute roles={['ADMIN']} />}>
+                  <Route path="admin/users" element={<AdminUsersPage />} />
                 </Route>
               </Route>
             </Route>

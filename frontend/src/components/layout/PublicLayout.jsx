@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Link, Outlet } from 'react-router'
+import { Link, Outlet, useLocation } from 'react-router'
+import ErrorBoundary from '../ErrorBoundary'
 import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../../hooks/useToast'
 import { buttonClasses } from '../ui/buttonStyles'
@@ -47,6 +48,7 @@ function HeaderActions() {
 // Layout for pages outside the signed-in app (home, sign in, register, errors).
 // <Outlet /> is where React Router renders the matched child page.
 export default function PublicLayout() {
+  const location = useLocation()
   return (
     <div className="flex min-h-screen flex-col">
       <header className="border-b border-slate-200 bg-white">
@@ -63,7 +65,9 @@ export default function PublicLayout() {
       </div>
 
       <main className="flex-1">
-        <Outlet />
+        <ErrorBoundary key={location.pathname}>
+          <Outlet />
+        </ErrorBoundary>
       </main>
 
       <footer className="border-t border-slate-200 bg-white">

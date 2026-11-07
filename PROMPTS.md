@@ -377,3 +377,38 @@ approve financial transactions in React).
 **Related commit:** `feat: implement deposit withdrawal and transfer interfaces`
 
 ---
+
+## Entry 11 – Day 2 Task 5: Backend integration
+
+**Date:** 2026-11-07
+
+**Prompt used:** "task5" (Day 2 master prompt Task 5: connect frontend to all backend APIs with reusable Axios services;
+handle 401/403/400/404/500; configure CORS correctly; don't hard-code the backend URL).
+
+**AI-generated solution:**
+- Audit of integration gaps: `PATCH /admin/users/:id/status` had no UI, `GET /admin/users` only used for a count,
+  `GET /accounts/:id/balance` unused. Added an admin **Users** page (search by name/email, role + status filters,
+  activate/deactivate with confirmation, no button on your own row) and a **Refresh balance** button that calls the balance endpoint.
+- Backend: users list accepts `q` and `status`; CORS tightened – exact origins only (`CORS_ORIGIN="*"`, paths and trailing
+  slashes now rejected at startup), explicit methods and allowed headers, `Retry-After` exposed, preflight cached 10 min.
+- Frontend: `cleanParams` moved to `api/params.js`; 429 errors say how long to wait (from `Retry-After`); new `ErrorBoundary`
+  around every page (a crash shows an error card instead of a blank app and resets on navigation).
+- README now has an endpoint → frontend function → page table.
+
+**Problems found (actual observations):**
+- Test of every error path in Chrome with Playwright request interception (24 checks): 500 + Try again, network down,
+  429, 400 field errors, 404, 403, render crash, 401 mid-session (cookies cleared → /login → back to the same page after
+  sign-in), deactivated user's open session kicked out, auditor blocked from /admin/users.
+- My mocked 429 first failed: the fake response had no `Access-Control-Expose-Headers`, so the browser hid `Retry-After`
+  from JavaScript. That is correct CORS behaviour – fixed the mock, and added a real-backend check (11 wrong passwords →
+  "Please try again in 15 minutes") proving the real header reaches the app.
+- CORS checked with preflight requests: allowed origin OK; untrusted origin gets no Allow-Origin; unknown header and
+  DELETE not allowed; `Vary: Origin` present.
+- Regression: unit 24/24, smoke 50/50, Task 3 UI 37/37, Task 4 money 31/31.
+
+**My corrections:**
+- _(fill in after reviewing)_
+
+**Related commit:** `feat: integrate React frontend with backend APIs`
+
+---
