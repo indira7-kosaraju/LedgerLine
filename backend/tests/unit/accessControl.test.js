@@ -1,11 +1,8 @@
 // Unit tests for the account ownership rules (no database needed).
 // Run with: npm test
-process.env.JWT_SECRET ??= 'test-secret-test-secret-test-secret-123';
-process.env.DATABASE_URL ??= 'postgresql://test:test@localhost:5432/test';
 
-const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { canAccessAccount, ACCOUNT_ACTIONS } = require('../src/services/accessControl.service');
+const { canAccessAccount, ACCOUNT_ACTIONS } = require('../../src/services/accessControl.service');
 
 const { VIEW, MOVE_MONEY, MANAGE } = ACCOUNT_ACTIONS;
 

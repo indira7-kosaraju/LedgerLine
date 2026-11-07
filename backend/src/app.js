@@ -31,7 +31,7 @@ app.use(helmet());
 // - origin: ONLY the exact frontend origins from .env (validated in config/env.js – never "*")
 // - credentials: lets the browser send the HttpOnly session cookie (only to those origins)
 // - allowedHeaders: only the headers our frontend actually sends
-// - exposedHeaders: lets the frontend read Retry-After on 429 responses
+// - exposedHeaders: lets the frontend read Retry-After (429) and Idempotent-Replayed
 // - maxAge: browsers may cache the preflight answer for 10 minutes
 app.use(
   cors({
@@ -39,7 +39,7 @@ app.use(
     credentials: true,
     methods: ['GET', 'POST', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'X-Requested-With', 'Authorization', 'X-Auth-Mode', 'Idempotency-Key'],
-    exposedHeaders: ['Retry-After'],
+    exposedHeaders: ['Retry-After', 'Idempotent-Replayed'],
     maxAge: 600,
   })
 );

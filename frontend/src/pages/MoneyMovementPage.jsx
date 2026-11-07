@@ -69,6 +69,7 @@ export default function MoneyMovementPage({ type }) {
   const [errors, setErrors] = useState({})
   const [formError, setFormError] = useState(null)
   const [review, setReview] = useState(null) // the checked request, waiting for confirmation
+  const [retry, setRetry] = useState(null) // a request whose outcome is unknown – can be re-sent safely
   const [submitting, setSubmitting] = useState(false)
   const [result, setResult] = useState(null)
 
@@ -88,6 +89,7 @@ export default function MoneyMovementPage({ type }) {
     setForm((f) => ({ ...f, [name]: value }))
     setErrors((e) => ({ ...e, [name]: undefined, ...(name.startsWith('to') || name === 'destinationMode' ? { destination: undefined } : {}) }))
     setFormError(null)
+    setRetry(null) // editing the form starts a NEW operation (new key)
   }
   const onChange = (event) => setField(event.target.name, event.target.value)
 
@@ -119,33 +121,43 @@ export default function MoneyMovementPage({ type }) {
     setFormError(null)
     if (Object.keys(found).length) return
 
+    const description_ = description || undefined
     setReview({
-      amountPaise: amount.paise,
+      // The exact request is frozen here, together with ONE new Idempotency-Key for this
+      // operation. A retry re-sends this same object, so the server can recognise it.
+      idempotencyKey: crypto.randomUUID(),
+      body:
+        type === 'TRANSFER'
+          ? { fromAccountId: accountId, ...destination.body, amountPaise: amount.paise, description: description_ }
+          : { accountId, amountPaise: amount.paise, description: description_ },
       amountDisplay: amount.display,
-      description: description || undefined,
+      description: description_,
       from: type === 'DEPOSIT' ? 'External source (simulated)' : source.accountNumber,
       to: type === 'DEPOSIT' ? source.accountNumber : type === 'WITHDRAWAL' ? 'External (simulated)' : destination.label,
-      destinationBody: destination?.body,
     })
   }
 
-  async function handleConfirm() {
-    setSubmitting(true)
-    const { amountPaise, description, destinationBody } = review
-    try {
-      let response
-      if (type === 'DEPOSIT') response = await deposit({ accountId, amountPaise, description })
-      else if (type === 'WITHDRAWAL') response = await withdraw({ accountId, amountPaise, description })
-      else response = await transfer({ fromAccountId: accountId, ...destinationBody, amountPaise, description })
+  const SEND = { DEPOSIT: deposit, WITHDRAWAL: withdraw, TRANSFER: transfer }
 
+  // Sends a reviewed request. Used for the first attempt AND for "Retry safely"
+  // (same body + same key → the server never moves the money twice).
+  async function send(request) {
+    setSubmitting(true)
+    try {
+      const response = await SEND[type](request.body, request.idempotencyKey)
       setResult(response)
       setReview(null)
+      setRetry(null)
       setForm((f) => ({ ...EMPTY_FORM, accountId: f.accountId }))
-      toast.success(`${config.noun.charAt(0).toUpperCase() + config.noun.slice(1)} of ${response.transaction.amount.formatted} completed.`)
+      const what = config.noun.charAt(0).toUpperCase() + config.noun.slice(1)
+      if (response.replayed) toast.info(`${what} had already been processed – showing the original result.`)
+      else toast.success(`${what} of ${response.transaction.amount.formatted} completed.`)
     } catch (error) {
       setReview(null)
       setFormError(error)
       setErrors(moneyFieldErrors(error))
+      // Outcome unknown (network / 5xx) → keep the request so it can be retried with the SAME key.
+      setRetry(describeMoneyError(error).uncertain ? request : null)
     } finally {
       setSubmitting(false)
       accounts.reload() // refresh balances after success – and after an uncertain failure
@@ -194,10 +206,15 @@ export default function MoneyMovementPage({ type }) {
             {problem && (
               <Alert tone={problem.uncertain ? 'warning' : 'danger'} title={problem.title} className="mb-5">
                 <p>{problem.message}</p>
-                {problem.uncertain && (
-                  <Link to="/transactions" className="mt-2 inline-block font-medium underline">
-                    Open transaction history
-                  </Link>
+                {problem.uncertain && retry && (
+                  <div className="mt-3 flex flex-wrap items-center gap-3">
+                    <Button size="sm" onClick={() => send(retry)} loading={submitting}>
+                      Retry safely ({retry.amountDisplay})
+                    </Button>
+                    <Link to="/transactions" className="font-medium underline">
+                      Open transaction history
+                    </Link>
+                  </div>
                 )}
               </Alert>
             )}
@@ -311,7 +328,7 @@ export default function MoneyMovementPage({ type }) {
         title={`Confirm ${config.noun}`}
         confirmLabel={review ? `${config.verb} ${review.amountDisplay}` : config.verb}
         loading={submitting}
-        onConfirm={handleConfirm}
+        onConfirm={() => send(review)}
         onCancel={() => setReview(null)}
       >
         {review && (

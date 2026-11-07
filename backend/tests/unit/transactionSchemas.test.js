@@ -1,6 +1,5 @@
-const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { depositSchema, transferSchema } = require('../src/utils/schemas/transaction.schemas');
+const { depositSchema, transferSchema } = require('../../src/utils/schemas/transaction.schemas');
 
 const accountId = '3dcf9ad1-466c-4841-b737-0a7da98edd11';
 const otherId = '039ce447-f752-4ab7-bafb-399dd182e0e6';

@@ -8,6 +8,7 @@ const AppError = require('../utils/AppError');
 const { toMoney, formatPaise } = require('../utils/money');
 const { canAccessAccount, ACCOUNT_ACTIONS } = require('./accessControl.service');
 const audit = require('./audit.service');
+const idempotencyService = require('./idempotency.service');
 
 // ─────────────────────────── helpers ───────────────────────────
 
@@ -135,10 +136,11 @@ const LIMITS = {
 
 // The ONE function that moves money. Deposit, withdrawal and transfer all use it.
 // Every step happens inside a single PostgreSQL transaction:
-//   lock rows → check rules → update both balances → write transaction
-//   → write DEBIT + CREDIT ledger entries → write SUCCESS audit row → COMMIT
-// If anything throws, PostgreSQL rolls back ALL of it. There is no partial transfer.
-async function moveMoney({ type, user, fromAccountId, toAccountId, amount, description, ctx }) {
+//   claim idempotency key → lock rows → check rules → update both balances → write transaction
+//   → write DEBIT + CREDIT ledger entries → write SUCCESS audit row → store response on the key → COMMIT
+// If anything throws, PostgreSQL rolls back ALL of it. There is no partial transfer,
+// and the key claim disappears with it.
+async function moveMoney({ type, user, fromAccountId, toAccountId, amount, description, ctx, idempotency }) {
   const action = `TXN_${type}`;
   const attempt = {
     amountPaise: amount.toString(),
@@ -157,6 +159,9 @@ async function moveMoney({ type, user, fromAccountId, toAccountId, amount, descr
     return await withRetry(() =>
       prisma.$transaction(
         async (tx) => {
+          // FIRST: claim the key. A concurrent request with the same key waits here.
+          await idempotencyService.claimKey(tx, user.id, idempotency);
+
           const locked = await lockAccounts(tx, [fromAccountId, toAccountId]);
           const from = locked.get(fromAccountId);
           const to = locked.get(toAccountId);
@@ -206,7 +211,7 @@ async function moveMoney({ type, user, fromAccountId, toAccountId, amount, descr
             tx
           );
 
-          return {
+          const result = {
             transaction: serializeTransaction({
               ...txn,
               fromAccount: { id: from.id, accountNumber: from.accountNumber },
@@ -218,11 +223,19 @@ async function moveMoney({ type, user, fromAccountId, toAccountId, amount, descr
                 ? { id: to.id, accountNumber: to.accountNumber, balance: toMoney(toAfter) }
                 : { id: from.id, accountNumber: from.accountNumber, balance: toMoney(fromAfter) },
           };
+
+          // LAST: remember the response on the key, in the same transaction as the money.
+          await idempotencyService.completeKey(tx, user.id, idempotency, { status: 201, body: result, transactionId: txn.id });
+          return result;
         },
         { maxWait: 5000, timeout: 10000 }
       )
     );
   } catch (err) {
+    // Lost the race to a concurrent request with the same key: not an error –
+    // runIdempotent() replays the winner's result. Nothing was written by this attempt.
+    if (idempotencyService.isKeyConflict(err)) throw err;
+
     // The transaction was rolled back, so record the refusal OUTSIDE it – otherwise the
     // audit row would be rolled back too and the attempt would leave no trace.
     if (err.refusal) {
@@ -236,6 +249,11 @@ async function moveMoney({ type, user, fromAccountId, toAccountId, amount, descr
         metadata: attempt,
         ...ctx,
       });
+      // Remember the refusal on the key so an identical retry gets the same answer.
+      await idempotencyService.storeRefusal(user.id, idempotency, {
+        status: err.statusCode,
+        body: { error: { code: err.code, message: err.message } },
+      });
     } else if (!(err instanceof AppError)) {
       await audit.recordSafe({
         actorId: user.id, action, outcome: 'ERROR', reason: 'INTERNAL_ERROR', metadata: attempt, ...ctx,
@@ -247,24 +265,34 @@ async function moveMoney({ type, user, fromAccountId, toAccountId, amount, descr
 
 // ─────────────────────────── public API ───────────────────────────
 
-async function deposit(user, { accountId, amountPaise, description }, ctx) {
-  const systemId = await getSystemAccountId();
-  return moveMoney({ type: 'DEPOSIT', user, fromAccountId: systemId, toAccountId: accountId, amount: amountPaise, description, ctx });
+// Each returns { status, body, replayed }: a new result (201) or the stored result of an
+// earlier request with the same Idempotency-Key (replayed: true). `idempotency` is
+// { key, endpoint, requestHash } from middleware/idempotency.js – always required.
+
+async function deposit(user, { accountId, amountPaise, description }, ctx, idempotency) {
+  return idempotencyService.runIdempotent(user, idempotency, ctx, async () => {
+    const systemId = await getSystemAccountId();
+    return moveMoney({ type: 'DEPOSIT', user, fromAccountId: systemId, toAccountId: accountId, amount: amountPaise, description, ctx, idempotency });
+  });
 }
 
-async function withdraw(user, { accountId, amountPaise, description }, ctx) {
-  const systemId = await getSystemAccountId();
-  return moveMoney({ type: 'WITHDRAWAL', user, fromAccountId: accountId, toAccountId: systemId, amount: amountPaise, description, ctx });
+async function withdraw(user, { accountId, amountPaise, description }, ctx, idempotency) {
+  return idempotencyService.runIdempotent(user, idempotency, ctx, async () => {
+    const systemId = await getSystemAccountId();
+    return moveMoney({ type: 'WITHDRAWAL', user, fromAccountId: accountId, toAccountId: systemId, amount: amountPaise, description, ctx, idempotency });
+  });
 }
 
-async function transfer(user, { fromAccountId, toAccountId, toAccountNumber, amountPaise, description }, ctx) {
-  let destinationId = toAccountId;
-  if (toAccountNumber) {
-    const dest = await prisma.account.findUnique({ where: { accountNumber: toAccountNumber }, select: { id: true } });
-    // Unknown number: use a random id so the normal "destination not found" path (and audit) runs.
-    destinationId = dest?.id ?? crypto.randomUUID();
-  }
-  return moveMoney({ type: 'TRANSFER', user, fromAccountId, toAccountId: destinationId, amount: amountPaise, description, ctx });
+async function transfer(user, { fromAccountId, toAccountId, toAccountNumber, amountPaise, description }, ctx, idempotency) {
+  return idempotencyService.runIdempotent(user, idempotency, ctx, async () => {
+    let destinationId = toAccountId;
+    if (toAccountNumber) {
+      const dest = await prisma.account.findUnique({ where: { accountNumber: toAccountNumber }, select: { id: true } });
+      // Unknown number: use a random id so the normal "destination not found" path (and audit) runs.
+      destinationId = dest?.id ?? crypto.randomUUID();
+    }
+    return moveMoney({ type: 'TRANSFER', user, fromAccountId, toAccountId: destinationId, amount: amountPaise, description, ctx, idempotency });
+  });
 }
 
 // ACCOUNT_HOLDER: only transactions touching their own accounts.

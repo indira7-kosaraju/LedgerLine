@@ -3,6 +3,7 @@ const { Router } = require('express');
 const authenticate = require('../middleware/authenticate');
 const { requirePermission } = require('../middleware/authorize');
 const validate = require('../middleware/validate');
+const { requireIdempotencyKey } = require('../middleware/idempotency');
 const {
   depositSchema,
   withdrawSchema,
@@ -20,9 +21,28 @@ router.use(authenticate);
 // account is checked inside the service, on the locked database row.
 const canMove = requirePermission('transactions:create');
 
-router.post('/deposit', canMove, validate(depositSchema, 'body', { auditAction: 'TXN_DEPOSIT' }), transactionController.deposit);
-router.post('/withdraw', canMove, validate(withdrawSchema, 'body', { auditAction: 'TXN_WITHDRAWAL' }), transactionController.withdraw);
-router.post('/transfer', canMove, validate(transferSchema, 'body', { auditAction: 'TXN_TRANSFER' }), transactionController.transfer);
+// Order matters: role check → body validation → Idempotency-Key (fingerprint of the clean body).
+router.post(
+  '/deposit',
+  canMove,
+  validate(depositSchema, 'body', { auditAction: 'TXN_DEPOSIT' }),
+  requireIdempotencyKey('TXN_DEPOSIT'),
+  transactionController.deposit
+);
+router.post(
+  '/withdraw',
+  canMove,
+  validate(withdrawSchema, 'body', { auditAction: 'TXN_WITHDRAWAL' }),
+  requireIdempotencyKey('TXN_WITHDRAWAL'),
+  transactionController.withdraw
+);
+router.post(
+  '/transfer',
+  canMove,
+  validate(transferSchema, 'body', { auditAction: 'TXN_TRANSFER' }),
+  requireIdempotencyKey('TXN_TRANSFER'),
+  transactionController.transfer
+);
 
 router.get(
   '/',

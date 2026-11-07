@@ -10,4 +10,8 @@ const MAX_DEPOSIT_PAISE = 10_000_000n;
 const MAX_WITHDRAWAL_PAISE = 50_000_000n;
 const MAX_TRANSFER_PAISE = 50_000_000n;
 
-module.exports = { SYSTEM_ACCOUNT_NUMBER, MAX_DEPOSIT_PAISE, MAX_WITHDRAWAL_PAISE, MAX_TRANSFER_PAISE };
+// How long an Idempotency-Key is remembered. A retry within this window returns the
+// original result; after it, the key is treated as new.
+const IDEMPOTENCY_TTL_HOURS = 24;
+
+module.exports = { SYSTEM_ACCOUNT_NUMBER, MAX_DEPOSIT_PAISE, MAX_WITHDRAWAL_PAISE, MAX_TRANSFER_PAISE, IDEMPOTENCY_TTL_HOURS };

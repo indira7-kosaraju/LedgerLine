@@ -77,6 +77,10 @@ npm run dev             # http://localhost:5173 – the backend must be running 
 | GET | /api/ledger/entries | ADMIN, AUDITOR | Raw ledger; filters `accountId`, `transactionId` |
 | GET | /api/ledger/verify | ADMIN, AUDITOR | Proves balances = ledger and Σ balances = 0 |
 
+**Every deposit, withdrawal and transfer requires an `Idempotency-Key` header** (16–100 chars, e.g. a UUID).
+Use one key per operation; re-sending the same key with the same body returns the original result
+(`Idempotent-Replayed: true`) without moving money again. Same key + different body → `422 IDEMPOTENCY_KEY_REUSED`.
+
 Amounts are sent as **`amountPaise`** – whole paise, e.g. `500000` = ₹5,000.00.
 
 Money is returned as `{ "paise": "500000", "formatted": "₹5,000.00", "currency": "INR" }`.
@@ -121,7 +125,15 @@ Error handling: every request goes through `api/client.js`, which turns failures
 | View audit logs (incl. refused attempts) | ✅ | – | ✅ |
 | Manage users | ✅ | – | – |
 
-Run unit tests: `npm test`
+## Tests
+
+```bash
+cd backend
+cp .env.test.example .env.test          # once – point it at a separate database
+createdb -O ledgerline_app ledgerline_test   # once
+npm test                                # Jest: unit + integration (Supertest, test DB)
+npm run smoke                           # end-to-end against the running dev server
+```
 
 ## Status
 
@@ -138,7 +150,7 @@ Day 2:
 - [x] Task 3 – Role-based dashboards
 - [x] Task 4 – Money movement pages
 - [x] Task 5 – Backend integration
-- [ ] Task 6 – Idempotency
+- [x] Task 6 – Idempotency
 - [ ] Task 7 – Concurrency and ledger security
 - [ ] Task 8 – Testing and final review
 

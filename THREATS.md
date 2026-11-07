@@ -14,7 +14,7 @@ Running list of threats and how each one is handled. Updated as features are bui
 | 8 | Password theft from database | bcrypt (cost 12); hash never returned by API; max 72 bytes enforced | Done (Task 3) |
 | 9 | Users accessing other users' accounts | `canAccessAccount` ownership check on the backend, refusals audited; unit tested | Done – account endpoints (Task 5), transactions (Task 6) |
 | 10 | Negative balances / partial transfers | Single DB transaction per movement, `FOR UPDATE` row locks, balance check on locked row, DB CHECK `balance >= 0`; rollback tested | Done (Task 6) |
-| 11 | Duplicate payments from retried requests | Idempotency keys | Planned (Day 2) |
+| 11 | Duplicate payments from retried requests | Required `Idempotency-Key`; key row inserted in the same DB transaction as the movement; `UNIQUE(userId, key)` | Done (Day 2 Task 6) |
 | 12 | Race conditions / deadlocks on concurrent transfers | Locks taken in sorted id order; retry on 40P01/40001; smoke-tested (20 parallel withdrawals, 20 opposite transfers) | Done (Task 6) – formal tests Day 2 |
 | 13 | Ledger history tampered with (edit/delete entries) | PostgreSQL triggers block UPDATE/DELETE on `ledger_entries` and `audit_logs` | Done (Task 2) |
 | 14 | Invalid money values (0, negative, self-transfer) reach the DB | CHECK constraints: amount > 0, from ≠ to | Done (Task 2) |
@@ -40,7 +40,7 @@ Running list of threats and how each one is handled. Updated as features are bui
 | 34 | Recipient balance leaked to sender | Transfer response only includes the caller's account balance | Done (Task 6) |
 | 35 | Ledger silently drifts from balances | `GET /api/ledger/verify` recomputes balances, per-txn balance, running balances, and Σ balances = 0 | Done (Task 6) |
 | 36 | Debug info (paths, code) leaked in errors | `NODE_ENV` now defaults to `production`; debug only when explicitly `development` | Done (Task 6) |
-| 37 | Duplicate money movement on client retry | Idempotency keys | **Not done – Day 2** |
+| 37 | Duplicate money movement on client retry | Idempotency (see #11); tested: 10 simultaneous identical requests → 1 transaction | Done (Day 2 Task 6) |
 | 38 | SYSTEM account row is a lock hotspot (all deposits/withdrawals serialize on it) | Accepted for now; could shard SYSTEM accounts later | Known limitation |
 
 | 39 | JWT stolen by XSS from browser storage | Token stored only in an `HttpOnly` cookie; never returned to the browser app's JavaScript | Done (Day 2 Task 2) |
@@ -55,11 +55,16 @@ Running list of threats and how each one is handled. Updated as features are bui
 
 | 47 | Recipient's balance / identity leaked through transaction details | Holders only receive ledger entries on their own accounts; `initiatedBy` hidden from receivers; uninvolved users get 403 (audited) | Done (Day 2 Task 4) |
 | 48 | Floating-point errors from typed amounts | Amount parsed as text (decimal point moved as a string) and sent as paise; backend re-validates | Done (Day 2 Task 4) |
-| 49 | Accidental double submission (double-click) | Confirm button disabled while the request runs (tested: one transaction) – **UI only**, real protection is idempotency | Partial – Task 6 |
-| 50 | User retries after a timeout and pays twice | UI warns "may or may not have gone through" and links to history | Partial – Task 6 (idempotency) |
+| 49 | Accidental double submission (double-click) | Button disabled while sending + same Idempotency-Key for the operation (server-enforced) | Done (Day 2 Task 6) |
+| 50 | User retries after a timeout and pays twice | "Retry safely" re-sends the same body + key → original result (tested with a dropped response) | Done (Day 2 Task 6) |
 
 | 51 | Misconfigured `CORS_ORIGIN="*"` with cookies exposes sessions to any site | Env validation refuses to start with `*`, paths or trailing slashes | Done (Day 2 Task 5) |
 | 52 | A rendering bug blanks the whole app | `ErrorBoundary` per page; nothing sensitive is sent anywhere | Done (Day 2 Task 5) |
 | 53 | Deactivated user keeps using an open browser session | Backend rejects on the next request (401); UI signs them out – tested | Done (Day 2 Task 5) |
+
+| 54 | Idempotency key reused with different data (e.g. bigger amount) | SHA-256 fingerprint of endpoint + validated body; mismatch → 422 + audit | Done (Day 2 Task 6) |
+| 55 | Another user's key interferes | Keys are scoped per user (`UNIQUE(userId, key)`) | Done (Day 2 Task 6) |
+| 56 | Tests accidentally run against real data | `.env.test` + setup refuses any database not named `ledgerline_test` | Done (Day 2 Task 6) |
+| 57 | Idempotency table grows forever | Keys expire after 24 h and are reused; no scheduled cleanup job yet | Known limitation |
 
 > **The system is not claimed to be fully secure.** Idempotency, formal concurrency tests and automated adversarial tests are Day 2 work.

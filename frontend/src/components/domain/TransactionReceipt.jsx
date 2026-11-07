@@ -1,6 +1,7 @@
 import { Link } from 'react-router'
 import { Card, CardBody } from '../ui/Card'
 import Button from '../ui/Button'
+import Alert from '../ui/Alert'
 import { buttonClasses } from '../ui/buttonStyles'
 import { CheckCircleIcon } from '../icons'
 import { formatDateTime, humanize } from '../../utils/format'
@@ -21,6 +22,13 @@ export default function TransactionReceipt({ result, onNew }) {
         </div>
 
         <p className="text-3xl font-semibold tabular-nums tracking-tight text-slate-900">{t.amount.formatted}</p>
+
+        {/* The server recognised this as a repeat of an earlier request (same Idempotency-Key). */}
+        {result.replayed && (
+          <Alert tone="info" title="Already processed">
+            This request had already gone through, so the server returned the original result. No money was moved twice.
+          </Alert>
+        )}
 
         <dl className="grid gap-4 rounded-lg bg-slate-50 p-4 text-sm sm:grid-cols-2">
           <div>

@@ -12,17 +12,19 @@ const TITLES = {
   FORBIDDEN: 'Not allowed',
   VALIDATION_ERROR: 'Please check the form',
   RATE_LIMITED: 'Too many requests',
+  IDEMPOTENCY_KEY_REUSED: 'Please start a new transaction',
 }
 
 export function describeMoneyError(error) {
-  // No answer from the server (network down, timeout, crash): we do NOT know
-  // whether the money moved. Say so honestly instead of inviting a blind retry.
+  // No answer from the server (network down, timeout, crash): we don't know yet whether
+  // the money moved. Retrying with the SAME Idempotency-Key is safe – the server either
+  // returns the original result or processes it exactly once.
   if (error.status === 0 || error.status >= 500) {
     return {
       title: 'We could not confirm this transaction',
       message:
-        'The server did not give a clear answer, so the transaction may or may not have gone through. ' +
-        'Check your transaction history before trying again.',
+        'The server did not give a clear answer. You can retry safely: LedgerLine will not move the money twice – ' +
+        'if it already went through, you will see the original result.',
       uncertain: true,
     }
   }

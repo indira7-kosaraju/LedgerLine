@@ -14,22 +14,22 @@ export async function getTransaction(id, { signal } = {}) {
   return data
 }
 
-// Money movement. `amountPaise` is a STRING of whole paise ("125050" = ₹1,250.50).
-// The backend validates and executes everything; these calls only send the request.
-// Each returns { transaction, account } – `account` is the caller's account with its new balance.
-
-export async function deposit({ accountId, amountPaise, description }) {
-  const { data } = await api.post('/transactions/deposit', { accountId, amountPaise, description })
-  return data
+// Every money movement needs an Idempotency-Key (the backend refuses requests without one).
+// Use ONE key per operation: send the same key again only to retry that same operation.
+// Each returns { transaction, account, replayed } – replayed: true means the server had
+// already processed this operation and returned the ORIGINAL result (nothing moved twice).
+async function moveMoney(path, body, idempotencyKey) {
+  const response = await api.post(path, body, { headers: { 'Idempotency-Key': idempotencyKey } })
+  return { ...response.data, replayed: response.headers['idempotent-replayed'] === 'true' }
 }
 
-export async function withdraw({ accountId, amountPaise, description }) {
-  const { data } = await api.post('/transactions/withdraw', { accountId, amountPaise, description })
-  return data
-}
+// `amountPaise` is a STRING of whole paise ("125050" = ₹1,250.50).
+export const deposit = ({ accountId, amountPaise, description }, idempotencyKey) =>
+  moveMoney('/transactions/deposit', { accountId, amountPaise, description }, idempotencyKey)
+
+export const withdraw = ({ accountId, amountPaise, description }, idempotencyKey) =>
+  moveMoney('/transactions/withdraw', { accountId, amountPaise, description }, idempotencyKey)
 
 // Destination: exactly one of toAccountId (own account) or toAccountNumber (anyone's).
-export async function transfer({ fromAccountId, toAccountId, toAccountNumber, amountPaise, description }) {
-  const { data } = await api.post('/transactions/transfer', { fromAccountId, toAccountId, toAccountNumber, amountPaise, description })
-  return data
-}
+export const transfer = ({ fromAccountId, toAccountId, toAccountNumber, amountPaise, description }, idempotencyKey) =>
+  moveMoney('/transactions/transfer', { fromAccountId, toAccountId, toAccountNumber, amountPaise, description }, idempotencyKey)

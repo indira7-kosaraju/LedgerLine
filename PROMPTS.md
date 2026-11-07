@@ -412,3 +412,47 @@ handle 401/403/400/404/500; configure CORS correctly; don't hard-code the backen
 **Related commit:** `feat: integrate React frontend with backend APIs`
 
 ---
+
+## Entry 12 – Day 2 Task 6: Idempotent financial transactions
+
+**Date:** 2026-11-07
+
+**Prompt used:** "task6" (Day 2 master prompt Task 6: unique idempotency key per money operation, stored in PostgreSQL with
+DB-level uniqueness, request fingerprint, stored original result, identical retries return it, different data with the same
+key rejected, simultaneous same-key requests handled, no duplicate money movement; don't rely on the frontend).
+
+**AI-generated solution:**
+- `services/idempotency.service.js`: the key row is INSERTed **inside the same PostgreSQL transaction** as the money movement
+  (`claimKey` first, `completeKey` with the response last). A committed movement always has a committed key row, and
+  `UNIQUE("userId", key)` allows only one → a second movement with the same key is impossible. A simultaneous request with
+  the same key blocks on the INSERT; if the first commits it gets a unique violation and receives the stored result.
+- `middleware/idempotency.js`: `Idempotency-Key` **required** on deposit/withdraw/transfer (400 if missing/invalid, audited);
+  fingerprint = SHA-256 of endpoint + canonical JSON of the validated body (500000 and "500000" match).
+- Replays return the original status + body with `Idempotent-Replayed: true` (exposed via CORS). Different body or endpoint
+  with the same key → 422 `IDEMPOTENCY_KEY_REUSED`. Business refusals are stored too (same answer on identical retry);
+  unexpected 500s are not stored. Keys expire after 24 h (`policy.IDEMPOTENCY_TTL_HOURS`). No schema migration needed.
+- Frontend: one `crypto.randomUUID()` key per reviewed operation, frozen together with the exact request body;
+  after a network error/5xx a **"Retry safely"** button re-sends the same body + key; editing the form starts a new operation.
+  Receipt shows "Already processed" for replays.
+- Testing moved to **Jest + Supertest** with a separate `ledgerline_test` database (`.env.test`, safety check refuses any other
+  DB). Existing unit tests converted. 18 idempotency integration tests.
+
+**Problems found (actual observations):**
+- **My mistake:** while checking `.gitignore` I ran `git check-ignore` – a read-only Git command, but the rules say never run
+  Git commands. No repository state was changed. Read the `.gitignore` file instead afterwards.
+- That check showed a real issue: the `.env.*` ignore rule would also hide the new `.env.test.example` template. Added
+  `!.env.test.example` to `.gitignore`.
+- All 42 Jest tests passed on the first run in 0.7 s, which looked suspiciously fast, so I verified: rows really appear in
+  `ledgerline_test`, the real DB was untouched. Then a **mutation test**: temporarily removing `claimKey` made
+  10 simultaneous deposits create **10 transactions** and 5 tests failed → the tests really detect the bug. Code restored.
+- Replayed JSON has the same content but different key order (PostgreSQL `jsonb` sorts keys) – documented, not a bug.
+- Browser "lost response" test: request reached the server and was processed, the response was dropped → "Retry safely" →
+  same key → "Already processed", balance changed once (12/12 checks).
+- Regression: Jest 42/42, smoke 54/54 (+4 idempotency checks), UI tests 37/37, 31/31, 24/24; real DB sum of balances = 0.
+
+**My corrections:**
+- _(fill in after reviewing)_
+
+**Related commit:** `feat: implement idempotent financial transactions`
+
+---

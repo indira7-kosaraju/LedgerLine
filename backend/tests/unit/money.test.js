@@ -1,7 +1,6 @@
-const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { formatPaise, toMoney } = require('../src/utils/money');
-const { generateAccountNumber } = require('../src/utils/accountNumber');
+const { formatPaise, toMoney } = require('../../src/utils/money');
+const { generateAccountNumber } = require('../../src/utils/accountNumber');
 
 test('formatPaise uses Indian grouping and 2 decimals', () => {
   assert.equal(formatPaise(0n), '₹0.00');

@@ -2,16 +2,25 @@
 // Start the server first (npm run dev), then in a second terminal: npm run smoke
 // Creates two fresh users on every run, so it can be run repeatedly.
 require('dotenv').config({ quiet: true });
+const crypto = require('crypto');
 
 const BASE = process.env.SMOKE_BASE_URL || `http://localhost:${process.env.PORT || 4000}/api`;
 let passed = 0;
 let failed = 0;
 
-async function call(method, path, token, body) {
+async function call(method, path, token, body, extraHeaders = {}) {
+  // Money movement requires an Idempotency-Key: use a fresh one unless the caller passes its own.
+  const isMoney = method === 'POST' && path.startsWith('/transactions/');
   const res = await fetch(BASE + path, {
     method,
     // X-Auth-Mode: bearer → login/register also return the token in the body (API-client mode).
-    headers: { 'Content-Type': 'application/json', 'X-Auth-Mode': 'bearer', ...(token && { Authorization: `Bearer ${token}` }) },
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Auth-Mode': 'bearer',
+      ...(token && { Authorization: `Bearer ${token}` }),
+      ...(isMoney && { 'Idempotency-Key': crypto.randomUUID() }),
+      ...extraHeaders,
+    },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   let json = null;
@@ -20,7 +29,7 @@ async function call(method, path, token, body) {
   } catch {
     // empty body
   }
-  return { status: res.status, body: json };
+  return { status: res.status, body: json, headers: res.headers };
 }
 
 function check(name, condition, detail = '') {
@@ -132,11 +141,22 @@ async function main() {
   check('admin cannot move money → 403', (await call('POST', '/transactions/deposit', admin, { accountId: A.id, amountPaise: 100 })).status === 403);
   check('balances unchanged after refusals', (await balanceOf(sender, A.id)) === '₹5,500.00' && (await balanceOf(receiver, B.id)) === '₹500.00');
 
+  section('Day 2 – Idempotency');
+  const key = crypto.randomUUID();
+  const first = await call('POST', '/transactions/deposit', sender, { accountId: A.id, amountPaise: 100 }, { 'Idempotency-Key': key });
+  const retry = await call('POST', '/transactions/deposit', sender, { accountId: A.id, amountPaise: 100 }, { 'Idempotency-Key': key });
+  check('retry with same key → same transaction, replayed', retry.status === 201 && retry.body?.transaction?.id === first.body?.transaction?.id && retry.headers.get('idempotent-replayed') === 'true');
+  check('balance moved once (₹5,501.00)', (await balanceOf(sender, A.id)) === '₹5,501.00', await balanceOf(sender, A.id));
+  const reused = await call('POST', '/transactions/deposit', sender, { accountId: A.id, amountPaise: 999 }, { 'Idempotency-Key': key });
+  check('same key, different amount → 422', reused.status === 422 && reused.body?.error?.code === 'IDEMPOTENCY_KEY_REUSED');
+  const noKeyRes = await fetch(`${BASE}/transactions/deposit`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sender}` }, body: JSON.stringify({ accountId: A.id, amountPaise: 100 }) });
+  check('missing key → 400', noKeyRes.status === 400);
+
   section('Task 6 – Ledger proof');
   const statement = await call('GET', `/accounts/${A.id}/statement`, sender);
-  check('statement has 4 entries', statement.body?.total === 4, `total ${statement.body?.total}`);
+  check('statement has 5 entries', statement.body?.total === 5, `total ${statement.body?.total}`);
   check('statement balance matches ledger', statement.body?.summary?.balanceMatchesLedger === true);
-  check('sender sees own 4 transactions', (await call('GET', '/transactions', sender)).body?.total === 4);
+  check('sender sees own 5 transactions', (await call('GET', '/transactions', sender)).body?.total === 5);
   const refused = await call('GET', `/audit-logs?outcome=REFUSED&actorId=${reg1.body.user.id}`, auditor);
   check('refused attempts are in the audit log', refused.body?.total >= 3, refused.body?.items?.map((i) => i.reason).join(', '));
   const verify = await call('GET', '/ledger/verify', auditor);
