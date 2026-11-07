@@ -213,3 +213,45 @@ money conservation, consistent lock order).
 **Related commit:** `feat: implement deposit withdrawal and transfer APIs`
 
 ---
+
+# DAY 2
+
+## Entry 7 – Day 2 review + Task 1: Frontend setup
+
+**Date:** 2026-11-07
+
+**Prompt used:** "LedgerLine – Day 2 Development Master Prompt" (review Day 1, then Task 1: React + Vite, React Router,
+Tailwind CSS, Axios, folder structure, API configuration, environment variables). Git is managed manually by me.
+
+**Day 1 review (AI findings, verified by running checks):**
+- Backend unchanged since Day 1; `npm test` 24/24 and `npm run smoke` 45/45 passed before any Day 2 change.
+- Gaps found for Day 2: idempotency not implemented (table exists, no logic); no `GET /api/transactions/:id` (needed for a
+  transaction details page); auth uses a Bearer token in the JSON response – HttpOnly cookies need backend support (Task 2);
+  global rate limit (100 req / 15 min) is too low for a dashboard that makes several calls per page (Task 5);
+  tests use Node's built-in runner, while Day 2 asks for Jest + Supertest (Tasks 6–8).
+
+**AI-generated solution (Task 1):**
+- Scaffolded with `create-vite@9.3.4 --template react` (Vite 8, React 19.3). Added Tailwind CSS 4.3 via `@tailwindcss/vite`,
+  React Router 8.5, Axios 1.21. Removed the Vite demo files.
+- `src/config/env.js` reads `VITE_API_BASE_URL` (fails with a clear message if missing) – backend URL is not hard-coded.
+- `src/api/client.js` – one Axios instance; every error is converted into an `ApiError { status, code, message, details }`
+  (handles HTTP errors, timeouts, network errors, canceled requests).
+- Design tokens (brand colours, system fonts, focus outlines) in `src/index.css`; reusable `Button`, `Card`, `Badge`, `Alert`, `Spinner`, `Logo`.
+- `PublicLayout`, `HomePage` with a live system-status card (calls `/api/health`), `NotFoundPage`. Vite `strictPort: true` on 5173
+  because backend CORS only allows that origin.
+
+**Problems found (actual observations):**
+- React Router's latest major is 8.5.1 (needs Node ≥ 22.22; this Mac has Node 26). Verified the declarative
+  `BrowserRouter/Routes/Route` API by building successfully.
+- oxlint warned `react(set-state-in-effect)` twice: first because the effect called a loader that set `loading` synchronously;
+  after splitting it, the rule still flagged the indirect call. Rewrote to set state only inside the promise callbacks and
+  re-fetch via a `refreshKey`. Lint now clean.
+- CORS check: requests with `Origin: http://localhost:5173` get `Access-Control-Allow-Origin`; an untrusted origin gets no
+  CORS header (browser blocks reading the response). Note: opening the app as `http://127.0.0.1:5173` would be blocked – use `localhost`.
+
+**My corrections:**
+- _(fill in after reviewing)_
+
+**Related commit:** `feat: initialize React frontend with Tailwind CSS`
+
+---

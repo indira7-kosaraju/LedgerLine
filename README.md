@@ -6,7 +6,7 @@ Every balance must be explainable by the ledger entries behind it.
 ## Stack
 
 - Backend: Node.js, Express, PostgreSQL, Prisma, JWT, bcrypt, Zod
-- Frontend (Day 2): React, Tailwind CSS
+- Frontend: React 19, Vite, Tailwind CSS 4, React Router, Axios
 
 ## Project structure
 
@@ -40,6 +40,15 @@ npm run dev
 ```
 
 Health check: `GET http://localhost:4000/api/health`
+
+## Running the frontend
+
+```bash
+cd frontend
+cp .env.example .env    # VITE_API_BASE_URL=http://localhost:4000/api
+npm install
+npm run dev             # http://localhost:5173 – the backend must be running too
+```
 
 ## API
 
@@ -92,6 +101,16 @@ Run unit tests: `npm test`
 - [x] Task 4 – Role-based authorization
 - [x] Task 5 – Account APIs
 - [x] Task 6 – Transaction APIs
+
+Day 2:
+- [x] Task 1 – Frontend setup (React, Vite, Tailwind, Router, Axios)
+- [ ] Task 2 – Login and registration
+- [ ] Task 3 – Role-based dashboards
+- [ ] Task 4 – Money movement pages
+- [ ] Task 5 – Backend integration
+- [ ] Task 6 – Idempotency
+- [ ] Task 7 – Concurrency and ledger security
+- [ ] Task 8 – Testing and final review
 
 > The system is **not** yet claimed to be secure. Idempotency, concurrency testing
 > and adversarial tests are planned for Day 2.
