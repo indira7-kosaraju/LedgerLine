@@ -70,6 +70,36 @@ describe('Listing and reading', () => {
     expect(statement.body.entries).toHaveLength(1);
   });
 
+  test('GET /balance equals the balance stored in PostgreSQL (checked directly with SQL)', async () => {
+    const holder = await createUser();
+    const account = await createAccount(holder);
+    await deposit(holder, account.id, 123456);
+    const api = await request(app).get(`/api/accounts/${account.id}/balance`).set(holder.auth);
+    const [row] = await prisma.$queryRaw`SELECT balance::text AS balance FROM accounts WHERE id = ${account.id}::uuid`;
+    expect(api.status).toBe(200);
+    expect(api.body.balance.paise).toBe(row.balance);
+    expect(api.body.balance.formatted).toBe('₹1,234.56');
+  });
+
+  test('admin and auditor may read any balance; a holder may not read the SYSTEM account', async () => {
+    const holder = await createUser();
+    const account = await createAccount(holder);
+    const [admin, auditor] = await Promise.all([createUser('ADMIN'), createUser('AUDITOR')]);
+    expect((await request(app).get(`/api/accounts/${account.id}/balance`).set(admin.auth)).status).toBe(200);
+    expect((await request(app).get(`/api/accounts/${account.id}/balance`).set(auditor.auth)).status).toBe(200);
+    const system = await prisma.account.findFirst({ where: { type: 'SYSTEM' } });
+    expect((await request(app).get(`/api/accounts/${system.id}/balance`).set(holder.auth)).status).toBe(403);
+  });
+
+  test('every new account gets a different account number', async () => {
+    const numbers = [];
+    for (let i = 0; i < 4; i++) {
+      const holder = await createUser();
+      for (let j = 0; j < 5; j++) numbers.push((await createAccount(holder)).accountNumber);
+    }
+    expect(new Set(numbers).size).toBe(20);
+  });
+
   test('unknown account → 404, malformed id → 400', async () => {
     const holder = await createUser();
     expect((await request(app).get('/api/accounts/00000000-0000-4000-8000-000000000000').set(holder.auth)).status).toBe(404);

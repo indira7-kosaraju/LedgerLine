@@ -88,6 +88,25 @@ describe('Login and session', () => {
     expect(wrong.body).toEqual(unknown.body);
   });
 
+  test('GET /me returns the profile and never the password hash', async () => {
+    const cookie = sessionCookie(await login(email, PASSWORD)).split(';')[0];
+    const me = await request(app).get('/api/auth/me').set('Cookie', cookie);
+    expect(Object.keys(me.body.user).sort()).toEqual(['createdAt', 'email', 'fullName', 'id', 'isActive', 'role', 'updatedAt']);
+  });
+
+  test('a deactivated user cannot log in – same generic 401, real reason only in the audit log', async () => {
+    const other = uniqueEmail();
+    await register({ email: other, password: PASSWORD, fullName: 'Inactive User' });
+    await prisma.user.update({ where: { email: other }, data: { isActive: false } });
+
+    const res = await login(other, PASSWORD);
+    expect(res.status).toBe(401);
+    expect(res.body.error.message).toBe('Invalid email or password'); // doesn't reveal the account exists
+    expect(sessionCookie(res)).toBeUndefined();
+    const audit = await prisma.auditLog.findFirst({ where: { action: 'AUTH_LOGIN', reason: 'USER_INACTIVE', metadata: { path: ['email'], equals: other } } });
+    expect(audit).not.toBeNull();
+  });
+
   test('logout → 204 and the cookie is cleared', async () => {
     const res = await request(app).post('/api/auth/logout').set('X-Requested-With', 'XMLHttpRequest');
     expect(res.status).toBe(204);
@@ -119,6 +138,30 @@ describe('Token validation', () => {
     }
     const expired = await request(app).get('/api/auth/me').set('Authorization', `Bearer ${candidates.expired}`);
     expect(expired.body.error.message).toBe('Token has expired');
+  });
+
+  test.each([
+    ['wrong scheme', (t) => `Token ${t}`],
+    ['empty Bearer', () => 'Bearer '],
+    ['garbage', () => 'Bearer not.a.jwt'],
+    ['two tokens', (t) => `Bearer ${t} ${t}`],
+  ])('malformed Authorization header (%s) → 401', async (_, header) => {
+    const { token } = await createUser();
+    const res = await request(app).get('/api/auth/me').set('Authorization', header(token));
+    expect(res.status).toBe(401);
+  });
+
+  test('an expired token inside the session cookie → 401 "Token has expired"', async () => {
+    const { user } = await createUser();
+    const expired = jwt.sign({ role: user.role }, secret, { ...opts, subject: user.id, expiresIn: -10 });
+    const res = await request(app).get('/api/auth/me').set('Cookie', `ll_session=${expired}`);
+    expect(res.status).toBe(401);
+    expect(res.body.error.message).toBe('Token has expired');
+  });
+
+  test('a token for a user that no longer exists → 401', async () => {
+    const ghost = jwt.sign({ role: 'ADMIN' }, secret, { ...opts, subject: crypto.randomUUID() });
+    expect((await request(app).get('/api/auth/me').set('Authorization', `Bearer ${ghost}`)).status).toBe(401);
   });
 
   test('the role inside a token is ignored – the role in the database counts', async () => {

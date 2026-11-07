@@ -8,8 +8,9 @@ const { SESSION_COOKIE } = require('../utils/authCookie');
 function getToken(req) {
   const header = req.get('authorization');
   if (header) {
-    const [scheme, token] = header.split(' ');
-    return scheme === 'Bearer' && token ? token : null;
+    // Exactly "Bearer <token>" – anything else (extra parts, other schemes) is rejected.
+    const match = /^Bearer ([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*)$/.exec(header);
+    return match ? match[1] : null;
   }
   return req.cookies?.[SESSION_COOKIE] || null;
 }
