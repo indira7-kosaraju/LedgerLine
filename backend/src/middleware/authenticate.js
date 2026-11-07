@@ -1,14 +1,24 @@
 const prisma = require('../config/prisma');
 const AppError = require('../utils/AppError');
 const { verifyAccessToken } = require('../utils/jwt');
+const { SESSION_COOKIE } = require('../utils/authCookie');
 
-// Protects a route: requires "Authorization: Bearer <token>".
-// On success, sets req.user = { id, email, fullName, role }.
+// Reads the JWT from "Authorization: Bearer <token>" (API tools, tests) or,
+// if that header is absent, from the HttpOnly session cookie (the React app).
+function getToken(req) {
+  const header = req.get('authorization');
+  if (header) {
+    const [scheme, token] = header.split(' ');
+    return scheme === 'Bearer' && token ? token : null;
+  }
+  return req.cookies?.[SESSION_COOKIE] || null;
+}
+
+// Protects a route. On success, sets req.user = { id, email, fullName, role }.
 async function authenticate(req, res, next) {
-  const header = req.get('authorization') || '';
-  const [scheme, token] = header.split(' ');
+  const token = getToken(req);
 
-  if (scheme !== 'Bearer' || !token) {
+  if (!token) {
     return next(new AppError(401, 'Authentication required', 'UNAUTHENTICATED'));
   }
 

@@ -2,6 +2,7 @@ const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
+const cookieParser = require('cookie-parser');
 
 const env = require('./config/env');
 const healthRoutes = require('./routes/health.routes');
@@ -13,6 +14,7 @@ const transactionRoutes = require('./routes/transaction.routes');
 const ledgerRoutes = require('./routes/ledger.routes');
 const notFound = require('./middleware/notFound');
 const errorHandler = require('./middleware/errorHandler');
+const csrfProtection = require('./middleware/csrfProtection');
 
 // app.js builds the Express app but does not start listening.
 // Keeping it separate from server.js lets tests import the app directly.
@@ -26,10 +28,16 @@ app.set('json replacer', (key, value) => (typeof value === 'bigint' ? value.toSt
 app.use(helmet());
 
 // Only our frontend origin may call the API from a browser.
-app.use(cors({ origin: env.CORS_ORIGIN.split(',').map((o) => o.trim()) }));
+// credentials: true lets the browser send the HttpOnly session cookie – allowed
+// ONLY for the exact origins listed (never "*").
+app.use(cors({ origin: env.CORS_ORIGIN.split(',').map((o) => o.trim()), credentials: true }));
 
 // Parse JSON bodies; reject anything over 10 KB to limit abuse.
 app.use(express.json({ limit: '10kb' }));
+
+// Read cookies (the session cookie), then block forged cookie-based requests.
+app.use(cookieParser());
+app.use(csrfProtection);
 
 // Global rate limit: max 100 requests per IP per 15 minutes.
 // Login and register have their own stricter limits (see auth.routes.js).

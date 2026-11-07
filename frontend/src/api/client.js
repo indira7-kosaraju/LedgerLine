@@ -53,10 +53,32 @@ function toApiError(error) {
 export const api = axios.create({
   baseURL: env.apiBaseUrl,
   timeout: 15000,
-  headers: { 'Content-Type': 'application/json' },
+  // Send the HttpOnly session cookie with every request. The token itself is
+  // never visible to JavaScript – the browser attaches it automatically.
+  withCredentials: true,
+  headers: {
+    'Content-Type': 'application/json',
+    // Required by the backend's CSRF protection for cookie-authenticated writes.
+    'X-Requested-With': 'XMLHttpRequest',
+  },
 })
+
+// Lets the auth layer react when the session expires (any 401 from a protected call).
+const unauthorizedListeners = new Set()
+export function onUnauthorized(listener) {
+  unauthorizedListeners.add(listener)
+  return () => unauthorizedListeners.delete(listener)
+}
 
 api.interceptors.response.use(
   (response) => response,
-  (error) => Promise.reject(toApiError(error)),
+  (error) => {
+    const apiError = toApiError(error)
+    // Login (wrong password) and the initial session check also return 401 –
+    // those calls set skipAuthRedirect so they don't count as "session expired".
+    if (apiError.status === 401 && !error.config?.skipAuthRedirect) {
+      unauthorizedListeners.forEach((listener) => listener(apiError))
+    }
+    return Promise.reject(apiError)
+  },
 )

@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router'
 import { getHealth } from '../api/health.api'
+import { useAuth } from '../hooks/useAuth'
+import { buttonClasses } from '../components/ui/buttonStyles'
 import { Card, CardBody, CardHeader } from '../components/ui/Card'
 import Badge from '../components/ui/Badge'
 import Button from '../components/ui/Button'
@@ -96,6 +99,8 @@ function SystemStatus() {
 }
 
 export default function HomePage() {
+  const { status } = useAuth()
+
   return (
     <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 lg:py-16">
       <div className="grid gap-10 lg:grid-cols-[1.4fr_1fr] lg:items-start">
@@ -108,6 +113,23 @@ export default function HomePage() {
             Open accounts, deposit simulated money, withdraw and transfer – with every rupee traceable to a
             balanced, append-only ledger.
           </p>
+
+          <div className="mt-6 flex flex-wrap gap-3">
+            {status === 'authenticated' ? (
+              <Link to="/dashboard" className={buttonClasses('primary', 'lg')}>
+                Go to dashboard
+              </Link>
+            ) : (
+              <>
+                <Link to="/register" className={buttonClasses('primary', 'lg')}>
+                  Create an account
+                </Link>
+                <Link to="/login" className={buttonClasses('secondary', 'lg')}>
+                  Sign in
+                </Link>
+              </>
+            )}
+          </div>
 
           <ul className="mt-8 grid gap-4 sm:grid-cols-2">
             {FEATURES.map((f) => (

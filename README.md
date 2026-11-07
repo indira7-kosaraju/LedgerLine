@@ -55,8 +55,9 @@ npm run dev             # http://localhost:5173 – the backend must be running 
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | GET | /api/health | – | Server + DB status |
-| POST | /api/auth/register | – | Create ACCOUNT_HOLDER user, returns token |
-| POST | /api/auth/login | – | Returns token |
+| POST | /api/auth/register | – | Create ACCOUNT_HOLDER user and sign in (cookie) |
+| POST | /api/auth/login | – | Sets HttpOnly `ll_session` cookie; returns `{ user }` (plus `token` if header `X-Auth-Mode: bearer`) |
+| POST | /api/auth/logout | – | Clears the session cookie (204) |
 | GET | /api/auth/me | Bearer | Current user profile |
 | GET | /api/audit-logs | ADMIN, AUDITOR | Audit trail; filters `outcome`, `action`, `actorId`, `entityId`, `page`, `limit` |
 | GET | /api/admin/users | ADMIN | List users; filter `role` |
@@ -78,6 +79,11 @@ npm run dev             # http://localhost:5173 – the backend must be running 
 Amounts are sent as **`amountPaise`** – whole paise, e.g. `500000` = ₹5,000.00.
 
 Money is returned as `{ "paise": "500000", "formatted": "₹5,000.00", "currency": "INR" }`.
+
+## Authentication modes
+
+- **Browser (React app):** HttpOnly cookie `ll_session`. Requests must include `X-Requested-With: XMLHttpRequest` for POST/PATCH/DELETE (CSRF protection).
+- **API tools / tests:** send `X-Auth-Mode: bearer` on login to receive the token, then use `Authorization: Bearer <token>`.
 
 ## Roles
 
@@ -104,7 +110,7 @@ Run unit tests: `npm test`
 
 Day 2:
 - [x] Task 1 – Frontend setup (React, Vite, Tailwind, Router, Axios)
-- [ ] Task 2 – Login and registration
+- [x] Task 2 – Login and registration
 - [ ] Task 3 – Role-based dashboards
 - [ ] Task 4 – Money movement pages
 - [ ] Task 5 – Backend integration

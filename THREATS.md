@@ -43,4 +43,10 @@ Running list of threats and how each one is handled. Updated as features are bui
 | 37 | Duplicate money movement on client retry | Idempotency keys | **Not done – Day 2** |
 | 38 | SYSTEM account row is a lock hotspot (all deposits/withdrawals serialize on it) | Accepted for now; could shard SYSTEM accounts later | Known limitation |
 
+| 39 | JWT stolen by XSS from browser storage | Token stored only in an `HttpOnly` cookie; never returned to the browser app's JavaScript | Done (Day 2 Task 2) |
+| 40 | CSRF using the session cookie | `SameSite=Strict`; CORS credentials only for the exact frontend origin; cookie-authenticated writes require `X-Requested-With` (403 + audit otherwise) | Done (Day 2 Task 2) |
+| 41 | Open redirect after login (`?from=//evil.com`) | Redirect target taken from router state and only accepted if it is an internal path (`/…`, not `//…`) | Done (Day 2 Task 2) |
+| 42 | UI shows pages a role shouldn't see | `ProtectedRoute roles={…}` hides them – **UI only**; the backend still enforces every permission | Done (Day 2 Task 2) |
+| 43 | Session can't be revoked server-side before expiry | Logout clears the cookie; deactivated users are rejected on the next request; no token denylist | Partial |
+
 > **The system is not claimed to be fully secure.** Idempotency, formal concurrency tests and automated adversarial tests are Day 2 work.

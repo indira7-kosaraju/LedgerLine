@@ -255,3 +255,41 @@ Tailwind CSS, Axios, folder structure, API configuration, environment variables)
 **Related commit:** `feat: initialize React frontend with Tailwind CSS`
 
 ---
+
+## Entry 8 – Day 2 Task 2: Login and registration
+
+**Date:** 2026-11-07
+
+**Prompt used:** "task2" (Day 2 master prompt Task 2: login + registration pages, validation, password visibility toggle,
+loading states, errors, success notifications, protected routes; prefer HttpOnly cookies if supported, otherwise explain tradeoffs).
+
+**AI-generated solution:**
+- **Backend (added, nothing removed):** session JWT now set as an `ll_session` cookie – `HttpOnly`, `SameSite=Strict`,
+  `Path=/api`, `Secure` in production, expires with the token. `authenticate` accepts `Authorization: Bearer` (API tools)
+  or the cookie (browser). Token is returned in the JSON body only when the client sends `X-Auth-Mode: bearer`, so the
+  React app's JavaScript never sees it. New `POST /api/auth/logout` (always succeeds, audited). CORS `credentials: true`
+  for the exact frontend origin only. New `csrfProtection` middleware: cookie-authenticated POST/PATCH/DELETE must send
+  `X-Requested-With: XMLHttpRequest`, otherwise 403 + audit row.
+- **Frontend:** `AuthProvider` (restores session via `GET /auth/me` on load; status loading/authenticated/anonymous),
+  `ToastProvider`, `useAuth`/`useToast` hooks, `ProtectedRoute` (with optional `roles`), `GuestRoute` (redirects signed-in
+  users; only internal redirect paths allowed), `LoginPage`, `RegisterPage` (live password checklist, confirm password),
+  `Input`, `PasswordInput` (show/hide toggle), temporary `DashboardPage`, `ForbiddenPage`, header sign-in/out.
+  Axios sends `withCredentials` + `X-Requested-With`; a global 401 listener signs the user out when a session expires.
+
+**Problems found (actual observations):**
+- **Bug in my own first draft:** `AuthProvider` called `toast.info()` inside a `setState` updater. React StrictMode runs
+  updaters twice in development, so the "session expired" toast would have shown twice. Fixed by tracking status in a ref.
+- oxlint's `only-export-components` rule warns when a file exports both a component and a hook, so context, provider and hook
+  are split into separate files (`context/AuthContext.js`, `context/AuthProvider.jsx`, `hooks/useAuth.js`).
+- The duplicate-email test printed a `prisma:error` stack in the server log even though the error is caught and returned as
+  409. Changed Prisma logging to warnings only; unexpected errors are still logged by `errorHandler`.
+- Smoke test updated to send `X-Auth-Mode: bearer` and extended with 5 cookie checks → 50/50 pass. Browser-style curl test
+  with a cookie jar: register → /me → create account → forged POST blocked (403 CSRF_REJECTED) → logout → /me 401.
+- Not yet verified visually in a real browser by the AI (no browser available) – verified by lint, build and HTTP tests.
+
+**My corrections:**
+- _(fill in after reviewing)_
+
+**Related commit:** `feat: implement login and registration pages`
+
+---
