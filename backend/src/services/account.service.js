@@ -63,7 +63,7 @@ async function createAccount(user, { currency }, ctx) {
 
 // ACCOUNT_HOLDER: only their own accounts (filters ignored).
 // ADMIN / AUDITOR: all accounts, with optional filters.
-async function listAccounts(user, { page, limit, ownerId, status, type }) {
+async function listAccounts(user, { page, limit, ownerId, status, type, q }) {
   let where;
   if (hasPermission(user.role, 'accounts:read:any')) {
     where = {};
@@ -74,8 +74,15 @@ async function listAccounts(user, { page, limit, ownerId, status, type }) {
     where = { ownerId: user.id, type: 'CUSTOMER' };
     if (status) where.status = status;
   }
+  if (q) {
+    where.OR = [
+      { accountNumber: { contains: q, mode: 'insensitive' } },
+      { owner: { email: { contains: q, mode: 'insensitive' } } },
+      { owner: { fullName: { contains: q, mode: 'insensitive' } } },
+    ];
+  }
 
-  const [rows, total] = await Promise.all([
+  const [rows, total, sum] = await Promise.all([
     prisma.account.findMany({
       where,
       orderBy: { createdAt: 'desc' },
@@ -84,9 +91,18 @@ async function listAccounts(user, { page, limit, ownerId, status, type }) {
       include: { owner: { select: { id: true, email: true, fullName: true } } },
     }),
     prisma.account.count({ where }),
+    // Total of CUSTOMER balances matching the filters, summed by PostgreSQL – the
+    // frontend never adds money up itself. (SYSTEM is excluded: it mirrors outside money.)
+    prisma.account.aggregate({ where: { AND: [where, { type: 'CUSTOMER' }] }, _sum: { balance: true } }),
   ]);
 
-  return { items: rows.map(serializeAccount), page, limit, total };
+  return {
+    items: rows.map(serializeAccount),
+    page,
+    limit,
+    total,
+    summary: { totalBalance: toMoney(sum._sum.balance ?? 0n) },
+  };
 }
 
 // `account` was already loaded and access-checked by requireAccountAccess.

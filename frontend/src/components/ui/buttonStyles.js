@@ -16,7 +16,7 @@ const SIZES = {
 // Shared by <Button> and by router <Link>s that should look like buttons.
 export function buttonClasses(variant = 'primary', size = 'md', className) {
   return cn(
-    'inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-colors disabled:cursor-not-allowed',
+    'inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg font-medium transition-colors disabled:cursor-not-allowed',
     VARIANTS[variant],
     SIZES[size],
     className,

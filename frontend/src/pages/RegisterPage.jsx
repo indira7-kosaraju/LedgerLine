@@ -55,7 +55,7 @@ export default function RegisterPage() {
     try {
       // confirmPassword is only checked here – the backend rejects unknown fields.
       const user = await register({ fullName: values.fullName.trim(), email: values.email.trim(), password: values.password })
-      toast.success(`Account created. Welcome to LedgerLine, ${user.fullName.split(' ')[0]}!`)
+      toast.success(`Account created. Welcome to LedgerLine, ${user.fullName}!`)
       // <GuestRoute> redirects to the app now that we're signed in.
     } catch (error) {
       if (error.code === 'EMAIL_TAKEN') {

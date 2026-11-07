@@ -2,12 +2,17 @@ import { BrowserRouter, Route, Routes } from 'react-router'
 import ToastProvider from './context/ToastProvider'
 import AuthProvider from './context/AuthProvider'
 import PublicLayout from './components/layout/PublicLayout'
+import AppLayout from './components/layout/AppLayout'
 import ProtectedRoute from './components/routing/ProtectedRoute'
 import GuestRoute from './components/routing/GuestRoute'
 import HomePage from './pages/HomePage'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
 import DashboardPage from './pages/DashboardPage'
+import AccountsPage from './pages/AccountsPage'
+import AccountDetailsPage from './pages/AccountDetailsPage'
+import AuditLogsPage from './pages/AuditLogsPage'
+import LedgerPage from './pages/LedgerPage'
 import ForbiddenPage from './pages/ForbiddenPage'
 import NotFoundPage from './pages/NotFoundPage'
 
@@ -18,20 +23,28 @@ export default function App() {
       <ToastProvider>
         <AuthProvider>
           <Routes>
+            {/* Signed-in app (sidebar layout) */}
+            <Route element={<ProtectedRoute />}>
+              <Route element={<AppLayout />}>
+                <Route path="dashboard" element={<DashboardPage />} />
+                <Route path="accounts" element={<AccountsPage />} />
+                <Route path="accounts/:id" element={<AccountDetailsPage />} />
+
+                {/* Admin + auditor only (UI guard – the backend enforces it too) */}
+                <Route element={<ProtectedRoute roles={['ADMIN', 'AUDITOR']} />}>
+                  <Route path="ledger" element={<LedgerPage />} />
+                  <Route path="audit-logs" element={<AuditLogsPage />} />
+                </Route>
+              </Route>
+            </Route>
+
+            {/* Public pages */}
             <Route element={<PublicLayout />}>
               <Route index element={<HomePage />} />
-
-              {/* Only for signed-out users */}
               <Route element={<GuestRoute />}>
                 <Route path="login" element={<LoginPage />} />
                 <Route path="register" element={<RegisterPage />} />
               </Route>
-
-              {/* Any signed-in user (role dashboards come in Task 3) */}
-              <Route element={<ProtectedRoute />}>
-                <Route path="dashboard" element={<DashboardPage />} />
-              </Route>
-
               <Route path="forbidden" element={<ForbiddenPage />} />
               <Route path="*" element={<NotFoundPage />} />
             </Route>

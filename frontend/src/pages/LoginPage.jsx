@@ -37,7 +37,7 @@ export default function LoginPage() {
     setSubmitting(true)
     try {
       const user = await login({ email: values.email.trim(), password: values.password })
-      toast.success(`Welcome back, ${user.fullName.split(' ')[0]}.`)
+      toast.success(`Welcome back, ${user.fullName}.`)
       // No navigate() here: <GuestRoute> sees we're signed in and redirects.
     } catch (error) {
       // 401 → "Invalid email or password", 429 → too many attempts, 0 → server down.

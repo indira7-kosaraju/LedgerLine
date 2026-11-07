@@ -13,6 +13,8 @@ const listAccountsQuerySchema = z.strictObject({
   ownerId: z.uuid().optional(),
   status: z.enum(['ACTIVE', 'FROZEN', 'CLOSED']).optional(),
   type: z.enum(['CUSTOMER', 'SYSTEM']).optional(),
+  // Search by account number, owner name or owner email (holders: within their own accounts only).
+  q: z.string().trim().min(1).max(64).optional(),
 });
 
 const updateAccountStatusSchema = z.strictObject({

@@ -59,11 +59,11 @@ npm run dev             # http://localhost:5173 – the backend must be running 
 | POST | /api/auth/login | – | Sets HttpOnly `ll_session` cookie; returns `{ user }` (plus `token` if header `X-Auth-Mode: bearer`) |
 | POST | /api/auth/logout | – | Clears the session cookie (204) |
 | GET | /api/auth/me | Bearer | Current user profile |
-| GET | /api/audit-logs | ADMIN, AUDITOR | Audit trail; filters `outcome`, `action`, `actorId`, `entityId`, `page`, `limit` |
+| GET | /api/audit-logs | ADMIN, AUDITOR | Audit trail; filters `outcome`, `action`, `actionPrefix`, `actorId`, `entityId`, `page`, `limit` |
 | GET | /api/admin/users | ADMIN | List users; filter `role` |
 | PATCH | /api/admin/users/:id/status | ADMIN | `{ "isActive": false }` to deactivate |
 | POST | /api/accounts | ACCOUNT_HOLDER | Create account (max 5), starts at ₹0 |
-| GET | /api/accounts | Any role | Holder: own accounts. Admin/Auditor: all, filters `ownerId`, `status`, `type` |
+| GET | /api/accounts | Any role | Holder: own accounts. Admin/Auditor: all, filters `ownerId`, `status`, `type`. Search `q`. Returns `summary.totalBalance` |
 | GET | /api/accounts/:id | Owner, ADMIN, AUDITOR | Account details |
 | GET | /api/accounts/:id/balance | Owner, ADMIN, AUDITOR | Current balance |
 | PATCH | /api/accounts/:id/status | ADMIN | `{ "status": "FROZEN" \| "ACTIVE" \| "CLOSED", "reason"? }` |
@@ -111,7 +111,7 @@ Run unit tests: `npm test`
 Day 2:
 - [x] Task 1 – Frontend setup (React, Vite, Tailwind, Router, Axios)
 - [x] Task 2 – Login and registration
-- [ ] Task 3 – Role-based dashboards
+- [x] Task 3 – Role-based dashboards
 - [ ] Task 4 – Money movement pages
 - [ ] Task 5 – Backend integration
 - [ ] Task 6 – Idempotency

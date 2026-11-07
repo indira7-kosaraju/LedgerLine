@@ -15,6 +15,7 @@ const envSchema = z.object({
   JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters'),
   JWT_EXPIRES_IN: z.string().min(1).default('1h'),
   BCRYPT_SALT_ROUNDS: z.coerce.number().int().min(10).max(15).default(12),
+  RATE_LIMIT_MAX: z.coerce.number().int().min(10).max(100000).default(600),
 });
 
 const parsed = envSchema.safeParse(process.env);

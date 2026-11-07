@@ -293,3 +293,46 @@ loading states, errors, success notifications, protected routes; prefer HttpOnly
 **Related commit:** `feat: implement login and registration pages`
 
 ---
+
+## Entry 9 – Day 2 Task 3: Role-based dashboards
+
+**Date:** 2026-11-07
+
+**Prompt used:** "task3" (Day 2 master prompt Task 3: separate ADMIN, ACCOUNT_HOLDER and AUDITOR dashboards; never show
+information the user isn't authorized to see).
+
+**AI-generated solution:**
+- **Backend additions:** `GET /api/accounts` returns `summary.totalBalance` (PostgreSQL `SUM` of customer balances, so React
+  never adds money up) and accepts `?q=` search (account number / owner name / email – holders only within their own accounts);
+  audit logs accept `?actionPrefix=` (e.g. `TXN_` for refused transaction attempts); ledger entries include `accountNumber`;
+  global rate limit configurable via `RATE_LIMIT_MAX` (default 600 / 15 min – dashboards make several calls per page).
+- **Frontend:** `AppLayout` (sidebar on desktop, slide-out menu on mobile, Escape closes), role-filtered navigation,
+  `/dashboard` renders a different dashboard per role, `/accounts` (holder: cards; admin/auditor: searchable, filterable,
+  paginated table with filters in the URL), `/accounts/:id` (balance, ledger proof, statement; admin-only freeze/unfreeze/close
+  with confirm dialog + audited reason), `/ledger` and `/audit-logs` (admin + auditor only).
+  Reusable `useApi` (loading/error/reload, cancels on unmount), `useQueryParams`, `DataTable`, `Pagination`, `StatCard`,
+  `ConfirmDialog` (native `<dialog>`), `LedgerIntegrityCard`, status badges.
+- Deposit/withdraw/transfer buttons intentionally left for Task 4 (with their pages) to avoid links to missing pages.
+
+**Problems found (actual observations):**
+- oxlint `exhaustive-deps`: (1) `items = data?.items ?? []` created a new array every render, so `useMemo` never cached –
+  fixed by memoizing `items`; (2) `useApi` used `fetcher` without listing it – fixed with the "latest ref" pattern.
+- Headless Chrome test (playwright-core in a scratch folder, driving the installed Chrome) – 37 checks across all three roles
+  plus mobile. Findings:
+  - First run reported the sidebar highlighting "Dashboard" on an account page. Investigated: **not a bug** – React Router
+    renders the new page ~100 ms after the URL changes (transition) and my test read the sidebar in between. Fixed the test to wait.
+  - "Search shows Ravi rows" first passed with 16 rows – the old list was still shown while the search loaded. Tightened the test;
+    the real result is 2 rows (only Ravi's accounts).
+  - Chrome logs every 4xx as a console error (e.g. the expected 401 from `/auth/me` before sign-in) – not app errors; the test
+    now fails only on real JS exceptions and 5xx responses.
+- **Real UI bugs found from screenshots and fixed:** "Re-verify" button text wrapped onto two lines (buttons now never wrap);
+  the Amount column was cut off in dashboard tables at 1280 px (compact table mode + side-by-side layout only from 1536 px;
+  measured at 1024/1280/1440/1600 px); the welcome toast said "Welcome back, LedgerLine." for "LedgerLine Admin" because I
+  used the first word of the name – now uses the full name.
+
+**My corrections:**
+- _(fill in after reviewing)_
+
+**Related commit:** `feat: implement role-based dashboards`
+
+---

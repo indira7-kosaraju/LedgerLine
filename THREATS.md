@@ -49,4 +49,8 @@ Running list of threats and how each one is handled. Updated as features are bui
 | 42 | UI shows pages a role shouldn't see | `ProtectedRoute roles={…}` hides them – **UI only**; the backend still enforces every permission | Done (Day 2 Task 2) |
 | 43 | Session can't be revoked server-side before expiry | Logout clears the cookie; deactivated users are rejected on the next request; no token denylist | Partial |
 
+| 44 | Account search used to discover other users' accounts | `?q=` is applied inside the holder's own-accounts filter (tested: holder searching another user's name → 0 results) | Done (Day 2 Task 3) |
+| 45 | Money summed in the browser (rounding, tampering) | Totals computed by PostgreSQL (`SUM`) and sent as formatted strings | Done (Day 2 Task 3) |
+| 46 | Dashboard calling APIs the role can't use | Each dashboard only calls its role's APIs; backend still returns 403 for anything else | Done (Day 2 Task 3) |
+
 > **The system is not claimed to be fully secure.** Idempotency, formal concurrency tests and automated adversarial tests are Day 2 work.

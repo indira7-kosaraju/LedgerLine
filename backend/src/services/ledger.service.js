@@ -8,6 +8,7 @@ function serializeEntry(e) {
     id: e.id,
     entryNumber: e.entryNumber.toString(),
     accountId: e.accountId,
+    accountNumber: e.account?.accountNumber ?? null,
     direction: e.direction,
     amount: toMoney(e.amount),
     balanceAfter: toMoney(e.balanceAfter),
@@ -20,6 +21,7 @@ function serializeEntry(e) {
 }
 
 const entryInclude = {
+  account: { select: { accountNumber: true } },
   transaction: {
     select: {
       id: true, reference: true, type: true, description: true,

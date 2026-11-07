@@ -39,13 +39,13 @@ app.use(express.json({ limit: '10kb' }));
 app.use(cookieParser());
 app.use(csrfProtection);
 
-// Global rate limit: max 100 requests per IP per 15 minutes.
-// Login and register have their own stricter limits (see auth.routes.js).
+// Global rate limit per IP per 15 minutes (RATE_LIMIT_MAX, default 600 – a dashboard
+// page makes several API calls). Login and register have their own stricter limits.
 app.use(
   '/api',
   rateLimit({
     windowMs: 15 * 60 * 1000,
-    limit: 100,
+    limit: env.RATE_LIMIT_MAX,
     standardHeaders: 'draft-8',
     legacyHeaders: false,
     message: { error: { code: 'RATE_LIMITED', message: 'Too many requests, please try again later' } },
