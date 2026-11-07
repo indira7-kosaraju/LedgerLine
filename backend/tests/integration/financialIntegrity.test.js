@@ -131,7 +131,7 @@ describe('Business refusals leave no partial writes', () => {
     ['transfer more than the balance', () => transfer(holder, a.id, b.id, 10001), 422, 'INSUFFICIENT_FUNDS'],
     ['deposit over the limit', () => deposit(holder, a.id, 10000001), 422, 'AMOUNT_EXCEEDS_LIMIT'],
     ['transfer to the same account', () => transfer(holder, a.id, a.id, 100), 400, 'SAME_ACCOUNT'],
-  ])('%s → %i %s, balances and ledger unchanged, refusal audited', async (_, act, status, code) => {
+  ])('%s → refused, balances and ledger unchanged, refusal audited', async (_, act, status, code) => {
     const before = await snapshot([a.id, b.id, systemId]);
     const res = await act();
     expect(res.status).toBe(status);

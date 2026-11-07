@@ -1,87 +1,411 @@
-# LedgerLine – Threat Model
+# LedgerLine – Financial Security Threat Model
 
-Running list of threats and how each one is handled. Updated as features are built.
+**Last updated:** 2026-11-07 (Day 3)
+**System:** React frontend → Express API (JWT in an HttpOnly cookie) → PostgreSQL via Prisma. Simulated money only (INR, stored as integer paise).
 
-| # | Threat | Mitigation | Status |
-|---|--------|------------|--------|
-| 1 | Secrets (DB password, JWT secret) leaked via Git | `.env` is in `.gitignore`; only `.env.example` with placeholders is committed | Done (Task 1) |
-| 2 | Server starts with weak or missing config | Env vars validated with Zod at startup; `JWT_SECRET` must be ≥ 32 chars | Done (Task 1) |
-| 3 | Internal error details leaked to clients | Central error handler returns generic message for unknown errors | Done (Task 1) |
-| 4 | Brute force / request flooding | Global limit 100 req / 15 min; login 10 failed / 15 min; register 10 / hour (per IP, in-memory) | Done (Task 3) – in-memory only |
-| 5 | Common HTTP header attacks (clickjacking, MIME sniffing) | Helmet security headers | Done (Task 1) |
-| 6 | Large request bodies used for DoS | JSON body limit of 10 KB | Done (Task 1) |
-| 7 | Cross-origin calls from untrusted websites | CORS: exact origins only ("*" rejected at startup), explicit methods + headers, `Vary: Origin` | Done (Day 2 Task 5) |
-| 8 | Password theft from database | bcrypt (cost 12); hash never returned by API; max 72 bytes enforced | Done (Task 3) |
-| 9 | Users accessing other users' accounts | `canAccessAccount` ownership check on the backend, refusals audited; unit tested | Done – account endpoints (Task 5), transactions (Task 6) |
-| 10 | Negative balances / partial transfers | Single DB transaction per movement, `FOR UPDATE` row locks, balance check on locked row, DB CHECK `balance >= 0`; rollback tested | Done (Task 6) |
-| 11 | Duplicate payments from retried requests | Required `Idempotency-Key`; key row inserted in the same DB transaction as the movement; `UNIQUE(userId, key)` | Done (Day 2 Task 6) |
-| 12 | Race conditions / deadlocks on concurrent transfers | Sorted lock order; retry with jitter on 40P01/40001/P2034 (tested with a real deadlock); 30 Jest concurrency tests | Done (Day 2 Task 7) |
-| 13 | Ledger history tampered with (edit/delete/truncate) | Triggers block UPDATE/DELETE/TRUNCATE on `ledger_entries`, `audit_logs` and `transactions` | Done (Day 2 Task 7) |
-| 14 | Invalid money values (0, negative, self-transfer) reach the DB | CHECK constraints: amount > 0, from ≠ to | Done (Task 2) |
-| 15 | Floating-point rounding errors on money | All amounts stored as BigInt paise | Done (Task 2) |
-| 16 | App compromise gives full DB control | App connects as dedicated `ledgerline_app` role, not the superuser | Done (Task 2) |
-| 17 | Self-registration as ADMIN (mass assignment) | Zod `strictObject` rejects unknown fields; role hard-coded to ACCOUNT_HOLDER | Done (Task 3) |
-| 18 | Forged / tampered JWT, `alg: none` attack | HS256 pinned, issuer + audience verified, ≥32-char secret | Done (Task 3) |
-| 19 | Email enumeration via login | Same error message for all failures; dummy bcrypt compare for unknown emails | Done (Task 3) |
-| 20 | Stale role / deactivated user still using old token | User re-loaded from DB on every authenticated request | Done (Task 3) |
-| 21 | Stolen token used until expiry | Short 1h expiry; no refresh/revocation yet | Partial – revocation not implemented |
-| 22 | Privilege escalation (holder calls admin/audit APIs) | Central permission matrix + `requirePermission` on every protected route; refusals audited | Done (Task 4) |
-| 23 | Admin/auditor moving money (insider fraud) | `transactions:create` and `MOVE_MONEY` granted to ACCOUNT_HOLDER only | Done (Task 4) |
-| 24 | Admin locks themselves out / hides own actions | Admin cannot change own status; all admin actions audited | Done (Task 4) |
-| 25 | Hard-coded admin credentials in code | ADMIN/AUDITOR created by seed from `.env` only | Done (Task 4) |
-| 26 | Client sets own balance or owner when creating an account | `strictObject` rejects `balance`/`ownerId`; server sets owner = logged-in user, balance = 0 | Done (Task 5) |
-| 27 | Guessable account identifiers | UUID primary keys; account numbers from `crypto.randomInt` | Done (Task 5) |
-| 28 | Precision loss sending money as JSON numbers | Money sent as string paise + formatted value | Done (Task 5) |
-| 29 | Account spam / limit bypass by simultaneous requests | Max 5 per user, counted inside a transaction that locks the user row (tested: 10 at once → 5) | Done (Day 2 Task 8) |
-| 30 | Status change racing with a money movement | Status update locks the row (`FOR UPDATE`) in a transaction | Done (Task 5) |
-| 31 | Moving money from someone else's account | Ownership checked on the **locked** row inside the transaction (ACCOUNT_HOLDER + owner only) | Done (Task 6) |
-| 32 | Malformed amounts (0, negative, decimals, `1e5`, huge) | Zod: integer or digit string → BigInt, > 0; policy limits per operation | Done (Task 6) |
-| 33 | Refused attempts leave no trace (rolled back with the transaction) | Refusals audited outside the transaction; validation failures on money routes audited too | Done (Task 6) |
-| 34 | Recipient balance leaked to sender | Transfer response only includes the caller's account balance | Done (Task 6) |
-| 35 | Ledger silently drifts from balances | Prevented by the DB: running-balance chain trigger + commit-time checks (balance = ledger, every transaction balanced); `/api/ledger/verify` as an independent audit | Done (Day 2 Task 7) |
-| 36 | Debug info (paths, code) leaked in errors | `NODE_ENV` now defaults to `production`; debug only when explicitly `development` | Done (Task 6) |
-| 37 | Duplicate money movement on client retry | Idempotency (see #11); tested: 10 simultaneous identical requests → 1 transaction | Done (Day 2 Task 6) |
-| 38 | SYSTEM account row is a lock hotspot (all deposits/withdrawals serialize on it) | Accepted for now; could shard SYSTEM accounts later | Known limitation |
+## How to read this document
 
-| 39 | JWT stolen by XSS from browser storage | Token stored only in an `HttpOnly` cookie; never returned to the browser app's JavaScript | Done (Day 2 Task 2) |
-| 40 | CSRF using the session cookie | `SameSite=Strict`; CORS credentials only for the exact frontend origin; cookie-authenticated writes require `X-Requested-With` (403 + audit otherwise) | Done (Day 2 Task 2) |
-| 41 | Open redirect after login (`?from=//evil.com`) | Redirect target taken from router state and only accepted if it is an internal path (`/…`, not `//…`) | Done (Day 2 Task 2) |
-| 42 | UI shows pages a role shouldn't see | `ProtectedRoute roles={…}` hides them – **UI only**; the backend still enforces every permission | Done (Day 2 Task 2) |
-| 43 | Session can't be revoked server-side before expiry | Logout clears the cookie; deactivated users are rejected on the next request; no token denylist | Partial |
+Each threat lists its description, an attack scenario, the impact, how it is prevented, **where the protection is in the code**,
+**which automated test proves it**, and the risks that remain. A protection is only marked as working when code **and** a passing
+test show it. Where it says *mutation-tested*, the protection was temporarily removed and the named tests had to fail; they did.
 
-| 44 | Account search used to discover other users' accounts | `?q=` is applied inside the holder's own-accounts filter (tested: holder searching another user's name → 0 results) | Done (Day 2 Task 3) |
-| 45 | Money summed in the browser (rounding, tampering) | Totals computed by PostgreSQL (`SUM`) and sent as formatted strings | Done (Day 2 Task 3) |
-| 46 | Dashboard calling APIs the role can't use | Each dashboard only calls its role's APIs; backend still returns 403 for anything else | Done (Day 2 Task 3) |
-
-| 47 | Recipient's balance / identity leaked through transaction details | Holders only receive ledger entries on their own accounts; `initiatedBy` hidden from receivers; uninvolved users get 403 (audited) | Done (Day 2 Task 4) |
-| 48 | Floating-point errors from typed amounts | Amount parsed as text (decimal point moved as a string) and sent as paise; backend re-validates | Done (Day 2 Task 4) |
-| 49 | Accidental double submission (double-click) | Button disabled while sending + same Idempotency-Key for the operation (server-enforced) | Done (Day 2 Task 6) |
-| 50 | User retries after a timeout and pays twice | "Retry safely" re-sends the same body + key → original result (tested with a dropped response) | Done (Day 2 Task 6) |
-
-| 51 | Misconfigured `CORS_ORIGIN="*"` with cookies exposes sessions to any site | Env validation refuses to start with `*`, paths or trailing slashes | Done (Day 2 Task 5) |
-| 52 | A rendering bug blanks the whole app | `ErrorBoundary` per page; nothing sensitive is sent anywhere | Done (Day 2 Task 5) |
-| 53 | Deactivated user keeps using an open browser session | Backend rejects on the next request (401); UI signs them out – tested | Done (Day 2 Task 5) |
-
-| 54 | Idempotency key reused with different data (e.g. bigger amount) | SHA-256 fingerprint of endpoint + validated body; mismatch → 422 + audit | Done (Day 2 Task 6) |
-| 55 | Another user's key interferes | Keys are scoped per user (`UNIQUE(userId, key)`) | Done (Day 2 Task 6) |
-| 56 | Tests accidentally run against real data | `.env.test` + setup refuses any database not named `ledgerline_test` | Done (Day 2 Task 6) |
-| 57 | Idempotency table grows forever | Keys expire after 24 h and are reused; no scheduled cleanup job yet | Known limitation |
-
-| 58 | Lost update (two requests read the same balance) if the app lock were ever missing | Chain trigger rejects it – proven by removing `FOR UPDATE` in a mutation test | Done (Day 2 Task 7) |
-| 59 | Money created by SQL (`UPDATE accounts SET balance = …`) | Commit-time trigger: balance must equal the latest ledger balance | Done (Day 2 Task 7) |
-| 60 | Database superuser bypass (can disable triggers) | Out of scope: the app uses a non-superuser role; protect superuser credentials operationally | Accepted risk |
-
-| 61 | Automated tests writing to real data | Test tools load `.env.test` explicitly and refuse any database not named `ledgerline_test` (a silent fallback to `.env` was found and fixed) | Done (Day 2 Task 8) |
-| 62 | Payments break when served over plain http (no `crypto.randomUUID`) | UUID v4 fallback via `crypto.getRandomValues` | Done (Day 2 Task 8) |
-| 63 | Rate limits per process (in-memory) / wrong client IP behind a proxy | Fine for one server; production needs a shared store (e.g. Redis) and `trust proxy` configured | Known limitation |
-| 64 | No HTTPS in local development | `Secure` cookie flag switches on with `NODE_ENV=production`; deploy behind HTTPS | Deployment requirement |
+- Test files are in `backend/tests/integration/` (Jest + Supertest, run against the separate `ledgerline_test` database) and
+  `frontend/e2e/` (Playwright in Chrome). Test names are quoted exactly as Jest/Playwright print them.
+- Run everything: `cd backend && npm test` (261 tests) · `cd frontend && npm run test:e2e` (23 tests).
+- Related: [docs/SECURITY_AUDIT.md](docs/SECURITY_AUDIT.md) – the Day 3 audit with the actual result of each attack.
 
 ## Summary
 
-All money paths are protected in two layers – application checks inside one PostgreSQL transaction, and database
-constraints/triggers that refuse an unbalanced or rewritten ledger. Idempotency, concurrency and adversarial behaviour
-are covered by automated tests (161 backend, 23 browser, 12 frontend unit). Remaining items are the known limitations
-above (#21, #43, #57, #60, #63, #64).
+| # | Threat | Status | Main protection | Proven by |
+|---|---|---|---|---|
+| 1 | Duplicate transactions | ✅ Mitigated | Required `Idempotency-Key`, unique per user, stored in the same DB transaction as the money | `idempotency.test.js` (mutation-tested) |
+| 2 | Concurrent withdrawals | ✅ Mitigated | `SELECT … FOR UPDATE` row lock; balance checked on the locked row | `concurrency.test.js` (mutation-tested) |
+| 3 | Race conditions (lost updates) | ✅ Mitigated | Row locks + database chain trigger | `concurrency.test.js`, `accounts.test.js` |
+| 4 | Unauthorized account access | ✅ Mitigated | Ownership check on the server for every account action | `authorization.test.js`, `security.test.js` |
+| 5 | Privilege escalation | ✅ Mitigated | Role read from the DB on every request; strict input schemas | `auth.test.js`, `authorization.test.js`, `security.test.js` |
+| 6 | Negative balances | ✅ Mitigated | Check on the locked row + `CHECK (balance >= 0)` | `concurrency.test.js`, `ledgerSecurity.test.js` |
+| 7 | SQL injection | ✅ Mitigated | Prisma parameterised queries; no unsafe raw SQL in app code | `security.test.js` |
+| 8 | Ledger tampering | ✅ Mitigated (⚠️ see risks) | Append-only + balancing triggers in PostgreSQL | `ledgerSecurity.test.js` |
+| 9 | Partial transaction failures | ✅ Mitigated | One PostgreSQL transaction per movement; commit-time checks | `concurrency.test.js`, `financialIntegrity.test.js` |
+| 10 | Idempotency key reuse | ✅ Mitigated | SHA-256 fingerprint of endpoint + body | `idempotency.test.js` (mutation-tested) |
+| 11 | Deadlocks | ✅ Mitigated | Locks always taken in sorted order; retry on deadlock | `concurrency.test.js` |
+| 12 | Replay attacks | ✅ Mitigated (fixed Day 3) | Idempotent replays; session version revokes tokens on logout | `security.test.js` (mutation-tested) |
+| 13 | Brute-force login attempts | ⚠️ Partially | Per-IP rate limit; bcrypt; generic errors | `rateLimit.test.js`, `auth.test.js` |
 
-> **This is a learning project with simulated money.** It has been tested carefully, but it has not had an independent
-> security audit and is not claimed to be production-ready. Idempotency, formal concurrency tests and automated adversarial tests are Day 2 work.
+---
+
+## 1. Duplicate transactions
+
+**Description.** The same money movement is executed more than once.
+
+**Attack scenario.** A user clicks *Transfer ₹500*. The server completes it, but the Wi-Fi drops before the answer arrives, so the
+browser (or the user) sends the request again. Or a script deliberately fires the same request many times.
+
+**Possible impact.** Money leaves the account twice; customer funds are lost and the books no longer match what the user intended.
+
+**Prevention mechanism.** Every deposit, withdrawal and transfer must carry an `Idempotency-Key`. The key row is inserted **inside the
+same PostgreSQL transaction** as the money movement, under `UNIQUE("userId", key)`. A committed movement therefore always has a
+committed key row, and only one such row can exist – a second movement with the same key is impossible. A retry gets the stored
+original response with `Idempotent-Replayed: true`.
+
+**Implemented protection.**
+- `backend/src/middleware/idempotency.js` – key required (400 if missing/invalid), request fingerprint.
+- `backend/src/services/idempotency.service.js` – `claimKey` (first step in the transaction), `completeKey` (stores the response before commit), `runIdempotent` (replays).
+- `backend/src/services/transaction.service.js` – `moveMoney` claims the key before locking any account.
+- `frontend/src/pages/MoneyMovementPage.jsx` – one key per reviewed operation; **Retry safely** re-sends the same body and key.
+
+**Corresponding tests.**
+- `idempotency.test.js` › "1. the same transfer request sent twice → one transaction; the second answer is a replay"
+- `idempotency.test.js` › "2. the same key used again and again → exactly one key row, one transaction, two ledger entries, all linked"
+- `idempotency.test.js` › "4. 25 identical transfers sent at the same moment → one transaction, 24 replays, books consistent"
+- `idempotency.test.js` › "10 identical deposits at once → exactly one transaction, all get the same result"
+- `idempotency.test.js` › "without a key a transfer cannot be sent at all (400) – so a client cannot "forget" protection"
+- `frontend/e2e/money.spec.js` › "lost response: the server processed it, "Retry safely" returns the original – money moves once"
+- *Mutation-tested:* removing the key claim made 10 identical deposits create 10 transactions (Day 2) and failed 10 of 11 Day 3 transfer tests.
+
+**Remaining accepted risks.**
+- Keys are remembered for 24 hours (`IDEMPOTENCY_TTL_HOURS`); a retry after that is treated as a new operation.
+- A client that creates a **new** key for every retry defeats the protection (our frontend does not).
+- Expired keys are reused on demand but never deleted by a scheduled job, so the table grows.
+
+## 2. Concurrent withdrawals
+
+**Description.** Two withdrawals (or transfers) from the same account run at the same moment and both pass the balance check.
+
+**Attack scenario.** Balance ₹1,000. The attacker sends "withdraw ₹800" and "withdraw ₹700" simultaneously, hoping both read ₹1,000.
+
+**Possible impact.** ₹1,500 leaves a ₹1,000 account – an overdraft, or money created out of nothing.
+
+**Prevention mechanism.** Inside the money transaction the account row is locked with `SELECT … FOR UPDATE`, and the balance is checked
+**on the locked row**. The second request waits for the first to commit and then sees the real, reduced balance.
+
+**Implemented protection.** `backend/src/services/transaction.service.js` – `lockAccounts()` and `checkRules()`.
+
+**Corresponding tests.**
+- `concurrency.test.js` › "Two simultaneous withdrawals: ₹1,000 balance, ₹800 and ₹700" (20 runs: exactly one succeeds, balance never negative)
+- `concurrency.test.js` › "50 simultaneous ₹100 withdrawals from ₹1,000 → exactly 10 succeed, balance ends at ₹0"
+- `concurrency.test.js` › "20 transfers of ₹100 from a ₹1,000 account to 4 receivers at once → exactly 10 succeed"
+- `concurrency.test.js` › "proof the requests REALLY overlap: PostgreSQL sees all 12 waiting for the same lock at once" (proves the tests are genuinely concurrent; it fails with "Expected: 12, Received: 1" if the requests are sent one after another)
+- *Mutation-tested:* removing `FOR UPDATE` failed 21 of 22 race tests (Day 2) and all 6 Day 3 concurrency tests.
+
+**Remaining accepted risks.** All deposits and withdrawals also lock the single SYSTEM account row, so they are processed one at a time
+(a throughput limit, not a safety issue).
+
+## 3. Race conditions (lost updates)
+
+**Description.** Two transactions read the same value and both write a result based on it; one update is lost.
+
+**Attack scenario.** Without locking, two requests both read ₹1,000 and write ₹200 and ₹300 – the last write wins and ₹1,500 has left
+while the balance shows ₹300. A similar race let 10 simultaneous "open account" requests create 7 accounts despite the limit of 5.
+
+**Possible impact.** Money created or destroyed silently; business limits bypassed.
+
+**Prevention mechanism.** Row locks in the application **and**, independently, the database trigger `ledger_entries_check_chain`, which
+rejects any ledger entry whose `balanceAfter` does not continue the account's running total. Account creation counts the user's
+accounts inside a transaction that locks the user row.
+
+**Implemented protection.**
+- `backend/src/services/transaction.service.js` – `lockAccounts()`.
+- `backend/prisma/migrations/20261107140000_ledger_integrity_triggers/migration.sql` – chain trigger and commit-time balance check.
+- `backend/src/services/account.service.js` – `createAccount()` locks the user row (fixed Day 2, found by a test).
+
+**Corresponding tests.**
+- `concurrency.test.js` › "40 deposits into ONE account at the same moment → every rupee arrives, nothing is lost"
+- `concurrency.test.js` › "30 deposits and 30 withdrawals on one account at the same moment → no lost updates"
+- `concurrency.test.js` › "mixed storm: 150 random deposits/withdrawals/transfers at once → books stay exact"
+- `accounts.test.js` › "10 simultaneous "open account" requests never create more than 5 accounts"
+- *Defence in depth shown:* with `FOR UPDATE` removed, the chain trigger rejected all 9 lost updates that a probe produced ("Ledger chain broken"); the old `CHECK` constraint alone would not have caught them.
+
+**Remaining accepted risks.** Concurrency is tested for the scenarios above; an admin status change racing a transfer is protected by
+the same row lock but has no dedicated concurrent test.
+
+## 4. Unauthorized account access
+
+**Description.** A user reads or moves money in an account that is not theirs.
+
+**Attack scenario.** Asha copies Ravi's account id from a shared screenshot and calls `GET /api/accounts/<id>` or
+`POST /api/transactions/transfer` with `fromAccountId` = Ravi's account.
+
+**Possible impact.** Privacy breach (balances, statements) or theft.
+
+**Prevention mechanism.** Every account action is checked on the server: holders may only view or move money from accounts they own;
+admins and auditors may view, never move money. Money rules are checked on the **locked** row inside the transaction. Transaction
+details show a holder only the ledger entries on their own accounts. Refusals are audited.
+
+**Implemented protection.**
+- `backend/src/services/accessControl.service.js` – `canAccessAccount`, `assertAccountAccess`.
+- `backend/src/services/transaction.service.js` – `checkRules()` (ownership on the locked row), `getTransaction()` (privacy filter).
+- `backend/src/config/permissions.js` – role permissions.
+
+**Corresponding tests.**
+- `authorization.test.js` › "view account → 403", "view balance → 403", "view statement → 403", "view transaction → 403"
+- `authorization.test.js` › "deposit into it → 403 NOT_OWNER, balances unchanged, refusal audited" (also "withdraw from it", "transfer out of it")
+- `security.test.js` › "another user's account: view, statement and money movement are all refused"
+- `transactions.test.js` › "the sender sees only their own entry, not the receiver's balance"
+- `unit/accessControl.test.js` › "missing ids never count as ownership" (this test found a real bug on Day 1)
+
+**Remaining accepted risks.** A holder gets 403 for someone else's account and 404 for a non-existent one, which reveals that an id
+exists; ids are random UUIDs, so this has no practical value to an attacker. The frontend's role checks only hide UI – the backend enforces everything.
+
+## 5. Privilege escalation
+
+**Description.** A user gains a role or permission they were not given.
+
+**Attack scenario.** Registering with `"role": "ADMIN"`; editing the role inside a JWT; sending `"role"` along with an admin request;
+an auditor calling admin endpoints.
+
+**Possible impact.** Full control: freezing accounts, deactivating users, reading every customer's data.
+
+**Prevention mechanism.** Public registration always creates `ACCOUNT_HOLDER`. Request bodies use strict schemas (unknown fields → 400).
+The user's role is **loaded from the database on every request**; the role inside the token is ignored. Admins and auditors can never
+move money (separation of duties); auditors are read-only.
+
+**Implemented protection.** `backend/src/services/auth.service.js` (role hard-coded), `backend/src/middleware/authenticate.js`
+(DB lookup), `backend/src/middleware/authorize.js` + `backend/src/config/permissions.js`, Zod `strictObject` schemas in
+`backend/src/utils/schemas/`.
+
+**Corresponding tests.**
+- `auth.test.js` › "mass assignment (choosing a role) → 400"
+- `auth.test.js` › "the role inside a token is ignored – the role in the database counts"
+- `security.test.js` › "mass assignment on the admin status endpoint (sneaking in "role") → 400"
+- `security.test.js` › "an auditor cannot perform admin operations or move money"
+- `authorization.test.js` › "ADMIN and AUDITOR cannot deposit (separation of duties)" (also withdraw, transfer, open account)
+- `authorization.test.js` › "AUDITOR is read-only: can read everything, change nothing"
+
+**Remaining accepted risks.** Admins are powerful by design (no two-person approval, no MFA). Admin and auditor accounts are created
+only by the seed script from `.env`; their passwords must be strong and kept secret.
+
+## 6. Negative balances
+
+**Description.** A customer account ends up below ₹0.
+
+**Attack scenario.** Withdrawing more than the balance, racing withdrawals (threat 2), or writing a negative balance directly in SQL.
+
+**Possible impact.** The bank effectively lends money it never agreed to lend; money is created.
+
+**Prevention mechanism.** Two independent layers: the application refuses with `422 INSUFFICIENT_FUNDS` after checking the locked
+row, and PostgreSQL refuses any customer balance below 0 (`CHECK` constraint).
+
+**Implemented protection.** `checkRules()` in `backend/src/services/transaction.service.js`; constraint
+`accounts_customer_balance_non_negative` in `backend/prisma/migrations/20261106163849_init/migration.sql`.
+
+**Corresponding tests.**
+- `transactions.test.js` › "withdrawing the exact balance is allowed (down to ₹0, never below)"
+- `financialIntegrity.test.js` › "insufficient balance → refused, balances and ledger unchanged, refusal audited"
+- `ledgerSecurity.test.js` › "negative customer balance → refused"
+- `tests/invariants.js` – the independent SQL oracle checks `negativeCustomerBalances = 0` after the concurrency, idempotency and integrity suites.
+
+**Remaining accepted risks.** The SYSTEM account is negative by design (it mirrors money that came in from outside). There are
+per-transaction limits but no daily limits.
+
+## 7. SQL injection
+
+**Description.** User input is executed as SQL.
+
+**Attack scenario.** Searching for `' OR '1'='1`, registering the name `Robert'); DROP TABLE users;--`, or putting SQL into an
+account number or id.
+
+**Possible impact.** Reading or destroying all data, including the ledger.
+
+**Prevention mechanism.** All queries go through Prisma, which sends values separately from the SQL text. The few raw queries use
+tagged templates (`` $queryRaw`…${value}` ``), which are parameterised too. The application code contains **no**
+`$queryRawUnsafe` / `$executeRawUnsafe`. Inputs are validated (UUIDs, `LL` + 10 digits, email format) before reaching the database.
+LIKE wildcards (`% _ \`) are escaped in searches.
+
+**Implemented protection.** Prisma throughout `backend/src/services/`; `backend/src/utils/escapeLike.js` (fixed Day 3); Zod schemas.
+
+**Corresponding tests.**
+- `security.test.js` › "account search q="' OR '1'='1" returns no extra rows and no error" (and three more payloads)
+- `security.test.js` › "a name containing SQL is stored as plain text and the tables still exist"
+- `security.test.js` › "injection in a transfer account number → rejected as invalid input, nothing moves"
+- `security.test.js` › "LIKE wildcards are literal: "%" and "_" no longer match everything (FIXED in Day 3)" *(mutation-tested: 2 tests fail without escaping)*
+
+**Remaining accepted risks.** Test code uses `$executeRawUnsafe` to create temporary failure triggers – only against `ledgerline_test`.
+
+## 8. Ledger tampering
+
+**Description.** Someone changes or deletes history, or makes the books not balance.
+
+**Attack scenario.** With database access: `UPDATE ledger_entries SET amount = 1`, `TRUNCATE ledger_entries`, editing a
+transaction's amount, or `UPDATE accounts SET balance = balance + 100000` (money from nowhere).
+
+**Possible impact.** Loss of the proof that every balance is correct; hidden theft.
+
+**Prevention mechanism.** PostgreSQL itself refuses it:
+- triggers block UPDATE, DELETE and TRUNCATE on `ledger_entries`, `transactions` and `audit_logs`;
+- every new entry must continue the account's running balance (chain trigger);
+- at commit, every new transaction must have exactly one matching DEBIT and CREDIT, and every changed balance must equal its latest ledger balance.
+
+The API has no routes that edit history. `GET /api/ledger/verify` and `npm run verify:db` recompute everything as an independent audit.
+
+**Implemented protection.** `backend/prisma/migrations/20261106163849_init/migration.sql` (append-only triggers, CHECKs) and
+`backend/prisma/migrations/20261107140000_ledger_integrity_triggers/migration.sql`; `backend/scripts/verify-db.js`.
+
+**Corresponding tests.**
+- `ledgerSecurity.test.js` › "UPDATE a ledger entry → refused", "DELETE a ledger entry → refused", "TRUNCATE the ledger → refused", "UPDATE a transaction amount → refused", "UPDATE an audit record → refused", "TRUNCATE the audit log → refused"
+- `ledgerSecurity.test.js` › "money from nowhere: raising a balance without a ledger entry → refused at commit"
+- `ledgerSecurity.test.js` › "unbalanced entries (debit ₹1.00, credit ₹0.90) → refused at commit"
+- `security.test.js` › "ledger records cannot be changed through the API (no such routes exist)"
+- The independent SQL oracle (`tests/invariants.js`) was itself proven: with one trigger disabled on the test DB, adding ₹0.01 was reported immediately.
+
+**Remaining accepted risks.**
+- ⚠️ **The application's database role `ledgerline_app` owns the tables.** It is not a superuser, but a table owner can disable that
+  table's triggers (this was done deliberately in a test on `ledgerline_test`). Someone who steals the application's database
+  password could therefore switch the protections off. Recommended for production: run migrations as an owner role and the API as
+  a separate role with only `SELECT/INSERT/UPDATE` privileges.
+- A database superuser or host compromise is out of scope.
+
+## 9. Partial transaction failures
+
+**Description.** A movement stops halfway – e.g. money debited but never credited.
+
+**Attack scenario.** The server crashes, the database connection drops, or a write fails after the first balance update.
+
+**Possible impact.** Money disappears or appears; balances stop matching the ledger.
+
+**Prevention mechanism.** Each movement is **one PostgreSQL transaction**: key claim, row locks, both balance updates, the transaction
+row, both ledger entries, the audit row and the stored response commit together or not at all. Deferred (commit-time) triggers reject
+an incomplete transaction. If the response is lost after commit, the idempotency key lets the client retry safely (threat 1).
+
+**Implemented protection.** `moveMoney()` in `backend/src/services/transaction.service.js` (`prisma.$transaction`); commit-time triggers in the `20261107140000_ledger_integrity_triggers` migration.
+
+**Corresponding tests.**
+- `concurrency.test.js` › "a failure in the middle of a transfer leaves NO trace: balances, transaction, ledger, idempotency key"
+- `concurrency.test.js` › "rollback under load: 10 transfers crash mid-way while 10 others succeed → only the good ones remain"
+- `financialIntegrity.test.js` › "failed withdrawal is rolled back completely (balance update + transaction row undone)"
+- `ledgerSecurity.test.js` › "a transaction with no ledger entries → refused at commit"
+
+**Remaining accepted risks.** None known for money movement. Audit rows for **refused** attempts are written outside the money
+transaction (so they survive the rollback); if the audit insert itself fails it is logged to the console instead.
+
+## 10. Idempotency key reuse
+
+**Description.** An old key is sent again with **different** data, hoping the server confuses the two requests.
+
+**Attack scenario.** A transfer of ₹100 succeeds with key K. The attacker (or a buggy client) sends key K again with ₹99,999 or
+another destination, hoping to get it executed – or to receive the cached "success" for a different request.
+
+**Possible impact.** Wrong amount moved, or a client believes an operation succeeded that never ran.
+
+**Prevention mechanism.** The server stores a SHA-256 fingerprint of the endpoint and the validated request body with each key. A
+different fingerprint → `422 IDEMPOTENCY_KEY_REUSED`, audited, nothing executed. Keys are scoped per user.
+
+**Implemented protection.** `canonicalJson()` and the hash in `backend/src/middleware/idempotency.js`; comparison in `findReplay()` in
+`backend/src/services/idempotency.service.js`.
+
+**Corresponding tests.**
+- `idempotency.test.js` › "3. reusing a key with a different payload is rejected (422) and moves nothing" – cases: "a different amount", "a different destination", "a different description", "the destination by number instead of id", "a different endpoint (withdraw)"
+- `idempotency.test.js` › "same key, different bodies at once → one wins, the rest are rejected, nothing extra moves"
+- `idempotency.test.js` › "two users can use the same key value independently"
+- *Mutation-tested:* disabling the fingerprint comparison failed exactly the 5 different-payload tests.
+
+**Remaining accepted risks.** Sending the same account as an id vs. as an account number counts as a different request (422) – by
+design, documented. Different keys with identical bodies are two separate operations, also by design.
+
+## 11. Deadlocks
+
+**Description.** Two transactions each hold a lock the other needs and wait forever.
+
+**Attack scenario.** Transfers A→B and B→A start at the same moment; each locks its source account first.
+
+**Possible impact.** Requests hang or fail; with naive retries, possible duplicates.
+
+**Prevention mechanism.** Accounts are always locked in **sorted id order**, so two transfers on the same pair queue instead of
+deadlocking. If PostgreSQL still reports a deadlock (40P01) or serialization failure (40001 / P2034), the whole transaction – already
+rolled back – is retried up to 3 times with a short random wait.
+
+**Implemented protection.** `lockAccounts()`, `withRetry()` and `isRetryable()` in `backend/src/services/transaction.service.js`.
+
+**Corresponding tests.**
+- `concurrency.test.js` › "30 A→B and 30 B→A transfers at the same time → all succeed, no deadlock"
+- `concurrency.test.js` › "circular transfers A→B, B→C, C→A at the same time → all succeed"
+- `concurrency.test.js` › "a real PostgreSQL deadlock is recognised as retryable"
+- `concurrency.test.js` › "a transfer caught in a deadlock is retried and completes exactly once"
+- `concurrency.test.js` › "withRetry: retries deadlocks up to 3 attempts, never retries other errors"
+
+**Remaining accepted risks.** After 3 failed attempts the request returns 500; nothing was written, and the client can retry safely with the same key.
+
+## 12. Replay attacks
+
+**Description.** A captured request or session token is sent again later.
+
+**Attack scenario.** (a) An attacker captures a valid money request and replays it. (b) An attacker copies a session token (e.g. from a
+shared computer) and keeps using it after the owner logs out – or after an admin deactivates and later reactivates the account.
+
+**Possible impact.** (a) Repeated money movement. (b) Continued access to someone's account.
+
+**Prevention mechanism.** (a) Money requests are idempotent – a replay returns the stored result and moves nothing. Cross-site
+replays are blocked by `SameSite=Strict` cookies and the `X-Requested-With` CSRF check. (b) **Fixed in Day 3:** every token carries
+the user's `sessionVersion`; logout and admin status changes raise it, so all older tokens are rejected (`401 SESSION_REVOKED`).
+Tokens also expire after 1 hour.
+
+**Implemented protection.** `backend/src/utils/jwt.js` (`sv` claim), `backend/src/middleware/authenticate.js` (version check),
+`backend/src/controllers/auth.controller.js` (`logout` revokes), `backend/src/services/user.service.js` (status change revokes),
+migration `20261107180000_user_session_version`; `backend/src/middleware/csrfProtection.js`.
+
+**Corresponding tests.**
+- `security.test.js` › "a copied token stops working after logout"
+- `security.test.js` › "a token from before a deactivation does NOT come back to life after reactivation"
+- `security.test.js` › "replaying a captured money request does not move money again (idempotency)"
+- `auth.test.js` › "cookie + POST without X-Requested-With → 403 CSRF_REJECTED (audited)"
+- `auth.test.js` › "tampered, foreign-secret, alg:none and expired tokens → 401"
+- *Mutation-tested:* removing the session-version check failed 4 tests; removing the bump on status change failed 1.
+
+**Remaining accepted risks.** A stolen token works until it expires (≤ 1 hour) unless the owner logs out or an admin changes the
+user's status. Logout ends the user's sessions on **all** devices (no per-device sessions). Tokens are not bound to a device or IP.
+
+## 13. Brute-force login attempts
+
+**Description.** Guessing passwords by trying many combinations.
+
+**Attack scenario.** A script tries thousands of passwords for `asha@example.com`, or tries common passwords across many emails.
+
+**Possible impact.** Account takeover.
+
+**Prevention mechanism.** Failed logins are limited to 10 per 15 minutes per client IP (`429` with `Retry-After`); registrations to
+10 per hour. Passwords need 8+ characters with upper case, lower case and a digit, and are stored with bcrypt (cost 12), which makes
+each guess slow. Wrong password, unknown email and deactivated account all return the same message, and a dummy bcrypt comparison
+makes their timing similar, so attackers can't learn which emails exist. Every failed login is audited with its real reason.
+Behind a hosting proxy, `TRUST_PROXY` makes the limit apply to the real client IP (fixed Day 3).
+
+**Implemented protection.** `backend/src/routes/auth.routes.js` (limiters, `AUTH_LOGIN_FAILURE_LIMIT`, `AUTH_REGISTER_LIMIT`),
+`backend/src/services/auth.service.js` (bcrypt, `DUMMY_HASH`, generic error), `backend/src/app.js` (`trust proxy`).
+
+**Corresponding tests.**
+- `rateLimit.test.js` › "after 3 failed logins the 4th attempt is blocked with 429 and Retry-After" (limit set to 3 for the test)
+- `rateLimit.test.js` › "registration is limited per IP"
+- `auth.test.js` › "wrong password and unknown email give the SAME 401 message"
+- `auth.test.js` › "weak password (too short) → 400" (also "no uppercase", "no digit", "over 72 bytes")
+- `security.test.js` › "TRUST_PROXY=1: the address added by the proxy is used – a client cannot spoof it by prepending its own"
+
+**Remaining accepted risks (why this is only "partially" mitigated).**
+- Rate-limit counters live in server memory: they reset on restart and are not shared between several server instances.
+- The limit is per IP: a botnet with many IPs is slowed only by bcrypt, and there is no per-account lockout, CAPTCHA or MFA.
+- Equal timing for wrong password vs. unknown email was measured manually on Day 1 (~0.2 s each); it is not an automated test.
+
+---
+
+## Other threats covered
+
+| Threat | Protection | Test |
+|---|---|---|
+| Session token stolen by XSS | Token only in an `HttpOnly` cookie; never readable by JavaScript | `frontend/e2e/auth.spec.js` › "the session token is NOT readable by JavaScript (HttpOnly cookie)" |
+| CSRF | `SameSite=Strict` + required `X-Requested-With` on cookie writes | `auth.test.js` › "cookie + POST without X-Requested-With → 403 CSRF_REJECTED (audited)" |
+| CORS misconfiguration | Exact origins only; `CORS_ORIGIN=*` refused at startup | `security.test.js` › "CORS: the configured origin is allowed with credentials; other origins get nothing; never "*"" |
+| Leaking internals in errors | Generic 500 body in production; no stack/SQL | `security.test.js` › "in production, a server error reveals no stack trace, SQL or debug text – and cookies are Secure" |
+| Leaking hashes / internal fields | Explicit allow-list of public fields | `security.test.js` › "no response ever contains a password hash or session version" |
+| Oversized / malformed requests | 10 KB body limit; JSON errors → 400; strict query schemas | `security.test.js` › "body larger than 10 KB → 413", "malformed JSON → 400 INVALID_JSON" |
+| Secrets in the repository or bundle | `.env` files ignored; values scanned | Manual scan, Day 3 – see `docs/SECURITY_AUDIT.md` |
+| Vulnerable dependencies | `npm audit`; `deepmerge-ts` override | `npm audit --omit=dev` → 0 (Day 3, manual) |
+| Tests running against real data | Test tools refuse any database not named `ledgerline_test` | Found and fixed Day 2 Task 8 (`scripts/start-test-server.js`) |
+
+## All remaining accepted risks
+
+1. The app's database role owns the tables and could disable triggers (threat 8) – use a DML-only runtime role in production.
+2. Rate limits are in memory and per IP; no per-account lockout, CAPTCHA or MFA (threat 13).
+3. Stolen tokens stay valid for up to 1 hour unless the owner logs out (threat 12); logout signs out all devices.
+4. Idempotency keys expire after 24 hours and are not cleaned up by a job (threat 1).
+5. Deposits and withdrawals serialize on the SYSTEM account row (throughput, not safety) (threat 2).
+6. 403 vs 404 reveals whether a (random UUID) account id exists (threat 4).
+7. HTTPS is required in production; local development uses plain http.
+8. No independent penetration test; LedgerLine uses simulated money only.

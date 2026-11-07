@@ -701,3 +701,40 @@ verify:db 13/13; no real secret in any project file or in the frontend bundle.
 **Related commit:** `security: strengthen authentication and financial access controls`
 
 ---
+
+## Entry 19 – Day 3 Task 5: THREATS.md (financial security threat model)
+
+**Date:** 2026-11-07
+
+**Prompt given to AI:** "start task5" (Day 3 Task 5: detailed THREATS.md with 13 threats – duplicate transactions, concurrent
+withdrawals, race conditions, unauthorized access, privilege escalation, negative balances, SQL injection, ledger tampering,
+partial failures, idempotency key reuse, deadlocks, replay, brute force – each with description, attack scenario, impact,
+prevention, implemented protection, corresponding test and remaining risks; never claim a fix without code and test proof).
+
+**What AI generated:** a rewritten `THREATS.md`: summary table, 13 detailed sections (each naming the code files and the exact
+passing tests, including mutation-test evidence where it exists), a table of other covered threats, and a consolidated list
+of accepted risks.
+
+**What was incorrect or incomplete, and how it was identified:**
+1. The old THREATS.md was a running table without attack scenarios, impact or test references – the format Day 3 asks for
+   was missing.
+2. **Four test titles printed "→ NaN 422"** in `financialIntegrity.test.js`: in the `test.each` title template, `%i` was
+   filled by the function argument instead of the status code. Identified while collecting exact test names from a Jest JSON
+   report for the document. Corrected the title (tests and assertions unchanged).
+3. **The app's database role owns the tables and can disable triggers** – noticed because the Task 1 oracle check did exactly
+   that as `ledgerline_app`; confirmed with `pg_tables` (owner = `ledgerline_app`, not a superuser). Recorded honestly as a
+   remaining risk under "Ledger tampering" with the recommended fix (separate DML-only runtime role) instead of claiming the
+   triggers make tampering impossible.
+4. Brute-force protection is recorded as **partially** mitigated: rate limits are per IP and in memory, there is no account
+   lockout/CAPTCHA/MFA, and equal login timing was only measured manually (Day 1), not tested automatically.
+
+**How it was verified:** a fresh Jest run (261/261) exported to JSON; a script checked that every one of the 81 test names
+quoted in THREATS.md exists in that run or in the Playwright specs (the only unmatched quote is the error message
+"Expected: 12, Received: 1", which is intentional).
+
+**My corrections:**
+- _(fill in after reviewing)_
+
+**Related commit:** `docs: add financial security threat model`
+
+---
