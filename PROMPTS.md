@@ -586,3 +586,38 @@ on a dedicated test database.
 **Related commits:** `test: add authentication and account management tests`, `test: add financial transaction integrity tests`
 
 ---
+
+## Entry 16 – Day 3 Task 2: Idempotency testing
+
+**Date:** 2026-11-07
+
+**Prompt given to AI:** "start task2" (Day 3 Task 2: same transfer twice; same key twice; same key with a different amount;
+identical requests simultaneously; retry after success. Expected: one transaction, identical retries return the original
+result, different payloads rejected, database consistent).
+
+**What AI generated:** a "Day 3" section in `backend/tests/integration/idempotency.test.js` (11 tests, all with transfers):
+1. same transfer twice → one transaction, second answer replayed;
+2. same key three times → exactly one `idempotency_keys` row, one transaction, two ledger entries, linked by `transactionId`;
+3. same key with a different amount / destination / description / account number instead of id / endpoint → 422
+   `IDEMPOTENCY_KEY_REUSED`, balances and transaction count unchanged, one audited refusal each;
+4. 25 identical transfers with `Promise.all` → 1 transaction, 24 replays, independent SQL oracle healthy;
+5. retry after the balance changed and the account was frozen → still the ORIGINAL 201 body (original new balance ₹600.00),
+   nothing re-executed; 5b. retry served by a freshly loaded copy of the app (`jest.isolateModules`, new DB pool) → replayed,
+   proving keys are stored in PostgreSQL and not in memory;
+plus: a transfer without a key → 400. The file's final check now uses both the app's verifier and the independent oracle.
+
+**What was incorrect or incomplete:** the Day 2 idempotency tests covered the behaviour mostly with **deposits**; Day 3
+asks about transfers, where two accounts change. Identified by mapping each of the five required scenarios to existing tests.
+No application bug was found in this task.
+
+**How I verified the tests are meaningful (mutation testing):**
+- Removing the key claim from the money transaction → 10 of the 11 new tests failed (only "no key → 400" passed, as expected).
+- Disabling the fingerprint comparison → exactly the 5 different-payload tests failed.
+- Code restored; full suite 218/218.
+
+**My corrections:**
+- _(fill in after reviewing)_
+
+**Related commit:** `test: verify idempotency and duplicate transaction prevention`
+
+---
