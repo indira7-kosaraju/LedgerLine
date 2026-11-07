@@ -500,3 +500,45 @@ concurrency tests were one-off scripts.
 **Related commit:** `feat: strengthen concurrency control and ledger integrity`
 
 ---
+
+## Entry 14 – Day 2 Task 8: Testing and final review
+
+**Date:** 2026-11-07
+
+**Prompt used:** "task8" (Day 2 master prompt Task 8: test registration, login, protected routes, role navigation, deposit,
+withdrawal, transfer, history, error handling; backend duplicate requests, simultaneous withdrawals, unauthorized access,
+insufficient balance, rollback, ledger consistency; verify actual database state; fix all discovered bugs).
+
+**AI-generated solution:**
+- Browser tests moved from the AI's scratch folder **into the project**: Playwright suite `frontend/e2e/` (auth, roles,
+  money, errors – 23 tests) that starts its own backend (:4001, `ledgerline_test`) and frontend (:5174). `npm run test:e2e`.
+- Frontend unit tests (`frontend/tests/unit`, Node test runner – the frontend is ES modules): amount parsing, validation,
+  money errors, idempotency keys. `npm test`.
+- New backend Jest suites: `auth`, `authorization`, `accounts`, `transactions`, `rateLimit` → 161 backend tests in total.
+- `npm run verify:db`: read-only check of the real database (13 checks). `scripts/prepare-test-db.js` shared by Jest and
+  Playwright; `scripts/start-test-server.js` for the browser tests. Login/registration limits configurable via env.
+
+**Bugs found and fixed (actual observations):**
+1. **Account limit bypass:** a new test sent 10 simultaneous "open account" requests – **7 accounts** were created (limit 5).
+   Fixed by counting inside a transaction that locks the user's row. Test now passes (exactly 5).
+2. **Test server silently used the REAL database:** `node -r dotenv/config … dotenv_config_path=.env.test` ignored the path
+   with this dotenv version and loaded `.env` (port 4000, development). Only the wrong port made Playwright time out instead
+   of running against real data. Replaced with `start-test-server.js`, which loads `.env.test` explicitly and refuses to start
+   unless the database is `ledgerline_test` (verified by pointing it at the real DB → refused).
+3. **"Session expired" toast shown 3 times:** the account page loads 3 things at once; all three 401s fired the handler before
+   React state changed. Fixed by updating the ref immediately; E2E test asserts exactly one notice.
+4. **`crypto.randomUUID()` only exists on https/localhost** – payments would break on plain-http hosting. Added
+   `utils/idempotencyKey.js` with a `crypto.getRandomValues` UUID v4 fallback (unit-tested, 500 keys, no repeats).
+- My own test mistakes in the first E2E run (not app bugs): 3 strict-mode selectors matched both an alert's title and its
+  message; one test called `signIn()` on an already signed-in browser; one matched "Across all your accounts". Fixed.
+
+**Final results:** backend Jest 161/161; frontend unit 12/12; Playwright 23/23 and 46/46 on two repeat runs (no flaky tests);
+smoke 54/54; lint clean; build OK. `verify:db`: real DB 13/13 (128 transactions / 256 entries, sum of balances 0);
+test DB 13/13 after 2,198 transactions from concurrency and tampering tests.
+
+**My corrections:**
+- _(fill in after reviewing)_
+
+**Related commit:** `test: verify financial transactions and application integration`
+
+---

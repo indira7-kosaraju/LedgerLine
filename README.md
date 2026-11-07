@@ -139,13 +139,25 @@ Error handling: every request goes through `api/client.js`, which turns failures
 
 ## Tests
 
+| Command (folder) | What it tests | Database |
+|---|---|---|
+| `npm test` (backend) | Jest + Supertest: unit, auth, authorization, accounts, transactions, idempotency, concurrency, ledger security, rate limits | `ledgerline_test` |
+| `npm test` (frontend) | Node test runner: amount parsing, validation, error messages, idempotency keys | none |
+| `npm run test:e2e` (frontend) | Playwright in Chrome: registration, login, protected routes, roles, money forms, history, error handling | `ledgerline_test` (own servers on :4001 / :5174) |
+| `npm run smoke` (backend) | End-to-end API check against your running dev server | your dev DB |
+| `npm run verify:db` (backend) | Read-only check of the real database state (money conserved, ledger consistent, protections installed) | your dev DB |
+
+One-time setup for the test database:
+
 ```bash
 cd backend
-cp .env.test.example .env.test          # once – point it at a separate database
-createdb -O ledgerline_app ledgerline_test   # once
-npm test                                # Jest: 85 tests – unit, idempotency, concurrency, ledger security
-npm run smoke                           # end-to-end against the running dev server
+cp .env.test.example .env.test               # then set the password and test-only admin/auditor
+createdb -O ledgerline_app ledgerline_test
+npm run test:db:prepare                       # migrations + seed (runs automatically before tests too)
 ```
+
+The test tools refuse to run against any database that is not named `ledgerline_test`.
+The browser tests use your installed Google Chrome (`channel: 'chrome'`); without Chrome, run `npx playwright install chromium` and remove that line from `playwright.config.js`.
 
 ## Status
 
@@ -164,7 +176,8 @@ Day 2:
 - [x] Task 5 – Backend integration
 - [x] Task 6 – Idempotency
 - [x] Task 7 – Concurrency and ledger security
-- [ ] Task 8 – Testing and final review
+- [x] Task 8 – Testing and final review
 
-> The system is **not** yet claimed to be secure. Idempotency, concurrency testing
-> and adversarial tests are planned for Day 2.
+> Idempotency, concurrency control and ledger integrity are implemented and covered by automated tests
+> (see THREATS.md for the remaining known limitations). LedgerLine uses **simulated money only** and has not had an
+> independent security audit.

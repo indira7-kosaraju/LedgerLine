@@ -42,7 +42,13 @@ export default function AuthProvider({ children }) {
   useEffect(
     () =>
       onUnauthorized(() => {
-        if (statusRef.current === 'authenticated') toast.info('Your session has expired. Please sign in again.')
+        // Several requests can fail with 401 at the same moment (a page loads 3 things at once).
+        // Update the ref right away so only the FIRST one shows the toast – React state
+        // would not change until after all of them have run.
+        if (statusRef.current === 'authenticated') {
+          statusRef.current = 'anonymous'
+          toast.info('Your session has expired. Please sign in again.')
+        }
         setState({ status: 'anonymous', user: null })
       }),
     [toast],

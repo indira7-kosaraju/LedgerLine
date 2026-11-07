@@ -5,6 +5,7 @@ import { useToast } from '../hooks/useToast'
 import { listAccounts } from '../api/accounts.api'
 import { deposit, transfer, withdraw } from '../api/transactions.api'
 import { parseAmount } from '../utils/money'
+import { newIdempotencyKey } from '../utils/idempotencyKey'
 import { describeMoneyError, moneyFieldErrors } from '../utils/moneyErrors'
 import { cn } from '../utils/cn'
 import PageHeader from '../components/ui/PageHeader'
@@ -125,7 +126,7 @@ export default function MoneyMovementPage({ type }) {
     setReview({
       // The exact request is frozen here, together with ONE new Idempotency-Key for this
       // operation. A retry re-sends this same object, so the server can recognise it.
-      idempotencyKey: crypto.randomUUID(),
+      idempotencyKey: newIdempotencyKey(),
       body:
         type === 'TRANSFER'
           ? { fromAccountId: accountId, ...destination.body, amountPaise: amount.paise, description: description_ }

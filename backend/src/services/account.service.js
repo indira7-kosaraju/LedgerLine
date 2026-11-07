@@ -27,33 +27,43 @@ function serializeAccount(account) {
 }
 
 async function createAccount(user, { currency }, ctx) {
-  const count = await prisma.account.count({ where: { ownerId: user.id } });
-  if (count >= MAX_ACCOUNTS_PER_USER) {
-    await audit.recordSafe({
-      actorId: user.id, action: 'ACCOUNT_CREATE', outcome: 'REFUSED', reason: 'ACCOUNT_LIMIT_REACHED',
-      metadata: { limit: MAX_ACCOUNTS_PER_USER }, ...ctx,
-    });
-    throw new AppError(409, `You can have at most ${MAX_ACCOUNTS_PER_USER} accounts`, 'ACCOUNT_LIMIT_REACHED');
-  }
-
   // Retry if a random account number happens to already exist.
   for (let attempt = 1; attempt <= ACCOUNT_NUMBER_ATTEMPTS; attempt++) {
     try {
-      const account = await prisma.account.create({
-        data: {
-          accountNumber: generateAccountNumber(),
-          type: 'CUSTOMER',
-          status: 'ACTIVE',
-          currency,
-          balance: 0n, // new accounts always start at zero; money only arrives via ledgered deposits
-          ownerId: user.id, // always the logged-in user, never from the request body
-        },
+      const account = await prisma.$transaction(async (tx) => {
+        // Lock this user's row so simultaneous "open account" requests from the same user
+        // count one after another. Without it, two requests could both see 4 accounts
+        // and both create one (found by a concurrency test in Day 2 Task 8).
+        await tx.$queryRaw`SELECT id FROM users WHERE id = ${user.id}::uuid FOR UPDATE`;
+
+        const count = await tx.account.count({ where: { ownerId: user.id } });
+        if (count >= MAX_ACCOUNTS_PER_USER) {
+          throw new AppError(409, `You can have at most ${MAX_ACCOUNTS_PER_USER} accounts`, 'ACCOUNT_LIMIT_REACHED');
+        }
+
+        return tx.account.create({
+          data: {
+            accountNumber: generateAccountNumber(),
+            type: 'CUSTOMER',
+            status: 'ACTIVE',
+            currency,
+            balance: 0n, // new accounts always start at zero; money only arrives via ledgered deposits
+            ownerId: user.id, // always the logged-in user, never from the request body
+          },
+        });
       });
       await audit.recordSafe({
         actorId: user.id, action: 'ACCOUNT_CREATE', outcome: 'SUCCESS', entityType: 'Account', entityId: account.id, ...ctx,
       });
       return serializeAccount(account);
     } catch (err) {
+      if (err.code === 'ACCOUNT_LIMIT_REACHED') {
+        await audit.recordSafe({
+          actorId: user.id, action: 'ACCOUNT_CREATE', outcome: 'REFUSED', reason: 'ACCOUNT_LIMIT_REACHED',
+          metadata: { limit: MAX_ACCOUNTS_PER_USER }, ...ctx,
+        });
+        throw err;
+      }
       const isNumberCollision =
         err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002' && attempt < ACCOUNT_NUMBER_ATTEMPTS;
       if (!isNumberCollision) throw err;

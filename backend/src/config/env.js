@@ -26,6 +26,10 @@ const envSchema = z.object({
   JWT_EXPIRES_IN: z.string().min(1).default('1h'),
   BCRYPT_SALT_ROUNDS: z.coerce.number().int().min(10).max(15).default(12),
   RATE_LIMIT_MAX: z.coerce.number().int().min(10).max(100000).default(600),
+  // Failed logins per IP per 15 minutes, and registrations per IP per hour.
+  // Raised only in .env.test so automated tests can create many users.
+  AUTH_LOGIN_FAILURE_LIMIT: z.coerce.number().int().min(1).max(100000).default(10),
+  AUTH_REGISTER_LIMIT: z.coerce.number().int().min(1).max(100000).default(10),
 });
 
 const parsed = envSchema.safeParse(process.env);

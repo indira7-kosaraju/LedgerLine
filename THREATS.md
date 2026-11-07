@@ -32,7 +32,7 @@ Running list of threats and how each one is handled. Updated as features are bui
 | 26 | Client sets own balance or owner when creating an account | `strictObject` rejects `balance`/`ownerId`; server sets owner = logged-in user, balance = 0 | Done (Task 5) |
 | 27 | Guessable account identifiers | UUID primary keys; account numbers from `crypto.randomInt` | Done (Task 5) |
 | 28 | Precision loss sending money as JSON numbers | Money sent as string paise + formatted value | Done (Task 5) |
-| 29 | Account spam | Max 5 accounts per user | Partial – count-then-insert race possible (Day 2) |
+| 29 | Account spam / limit bypass by simultaneous requests | Max 5 per user, counted inside a transaction that locks the user row (tested: 10 at once → 5) | Done (Day 2 Task 8) |
 | 30 | Status change racing with a money movement | Status update locks the row (`FOR UPDATE`) in a transaction | Done (Task 5) |
 | 31 | Moving money from someone else's account | Ownership checked on the **locked** row inside the transaction (ACCOUNT_HOLDER + owner only) | Done (Task 6) |
 | 32 | Malformed amounts (0, negative, decimals, `1e5`, huge) | Zod: integer or digit string → BigInt, > 0; policy limits per operation | Done (Task 6) |
@@ -71,4 +71,17 @@ Running list of threats and how each one is handled. Updated as features are bui
 | 59 | Money created by SQL (`UPDATE accounts SET balance = …`) | Commit-time trigger: balance must equal the latest ledger balance | Done (Day 2 Task 7) |
 | 60 | Database superuser bypass (can disable triggers) | Out of scope: the app uses a non-superuser role; protect superuser credentials operationally | Accepted risk |
 
-> **The system is not claimed to be fully secure.** Idempotency, formal concurrency tests and automated adversarial tests are Day 2 work.
+| 61 | Automated tests writing to real data | Test tools load `.env.test` explicitly and refuse any database not named `ledgerline_test` (a silent fallback to `.env` was found and fixed) | Done (Day 2 Task 8) |
+| 62 | Payments break when served over plain http (no `crypto.randomUUID`) | UUID v4 fallback via `crypto.getRandomValues` | Done (Day 2 Task 8) |
+| 63 | Rate limits per process (in-memory) / wrong client IP behind a proxy | Fine for one server; production needs a shared store (e.g. Redis) and `trust proxy` configured | Known limitation |
+| 64 | No HTTPS in local development | `Secure` cookie flag switches on with `NODE_ENV=production`; deploy behind HTTPS | Deployment requirement |
+
+## Summary
+
+All money paths are protected in two layers – application checks inside one PostgreSQL transaction, and database
+constraints/triggers that refuse an unbalanced or rewritten ledger. Idempotency, concurrency and adversarial behaviour
+are covered by automated tests (161 backend, 23 browser, 12 frontend unit). Remaining items are the known limitations
+above (#21, #43, #57, #60, #63, #64).
+
+> **This is a learning project with simulated money.** It has been tested carefully, but it has not had an independent
+> security audit and is not claimed to be production-ready. Idempotency, formal concurrency tests and automated adversarial tests are Day 2 work.
