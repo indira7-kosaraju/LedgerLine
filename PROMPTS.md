@@ -621,3 +621,41 @@ No application bug was found in this task.
 **Related commit:** `test: verify idempotency and duplicate transaction prevention`
 
 ---
+
+## Entry 17 – Day 3 Task 3: Concurrency testing
+
+**Date:** 2026-11-07
+
+**Prompt given to AI:** "start task 3" (Day 3 Task 3: ₹1,000 balance, ₹800 + ₹700 withdrawals at once → only one succeeds;
+also concurrent transfers, concurrent deposits, two transfers on the same accounts, rollback, deadlock/retry; use genuine
+concurrency, verify actual PostgreSQL balances and ledger entries, no fake sequential tests).
+
+**What AI generated:** a "Day 3" section in `backend/tests/integration/concurrency.test.js` (6 tests) on top of the 30
+Day 2 tests (₹800/₹700 race ×20, 50×₹100, opposite and circular transfers, 150-op storm, real deadlock + retry, rollback):
+- **Proof of genuine concurrency:** an outside transaction holds the account's row lock; 12 withdrawals are sent with
+  `Promise.all`; the test asks PostgreSQL (`pg_stat_activity`, `wait_event_type = 'Lock'`) how many sessions are waiting →
+  12 at the same moment. Then the lock is released: exactly 10 succeed, 2 are refused, balance ₹0.
+- 40 different deposits into one account at once → balance = exact sum, 40 credit rows, SYSTEM debited by the same total.
+- 30 deposits + 30 withdrawals on one account at once → no lost updates, 61 ledger rows.
+- 20 × ₹100 transfers from ₹1,000 to 4 receivers at once → exactly 10 succeed; each receiver's credit rows match its balance.
+- 30 same-direction A→B transfers at once → exact balances and debit/credit counts.
+- **Rollback under load:** credits to one account crash (temporary trigger) while 10 other transfers succeed at the same
+  time → only the successful ones remain; the broken account has no ledger rows and no transactions.
+Every new test ends with the independent SQL oracle; the file's final check uses both the app's verifier and the oracle.
+
+**What was incomplete:** concurrent deposits, many-transfer races, same-direction transfers and rollback under load were
+not tested before; and nothing proved that `Promise.all` requests really overlapped. Identified by mapping the Day 3 list
+to existing tests. No application bug was found in this task.
+
+**How I verified the tests are meaningful (mutation testing):**
+- Removed `FOR UPDATE` from `lockAccounts` → all 6 new tests failed.
+- Changed the overlap test to send requests one after another → it failed with "Expected: 12, Received: 1", i.e. the test
+  detects fake (sequential) concurrency.
+- Both reverted; full suite 224/224.
+
+**My corrections:**
+- _(fill in after reviewing)_
+
+**Related commit:** `test: verify concurrent transaction safety`
+
+---

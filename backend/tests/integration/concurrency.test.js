@@ -5,6 +5,7 @@ const {
   prisma, createUser, createAccount, deposit, withdraw, transfer, balanceOf, verifyLedger,
 } = require('../helpers');
 const { withRetry, isRetryable } = require('../../src/services/transaction.service');
+const { expectHealthyLedger } = require('../invariants');
 
 afterAll(() => prisma.$disconnect());
 
@@ -248,7 +249,157 @@ describe('Rollback', () => {
   });
 });
 
-test('the ledger balances after every concurrency test', async () => {
+// ─────────────────────────────────────────────────────────────────────────────
+// Day 3, Task 3 – more concurrent scenarios, each verified against PostgreSQL
+// (balances, ledger entries, and the independent SQL oracle in tests/invariants.js).
+// ─────────────────────────────────────────────────────────────────────────────
+describe('Day 3 – concurrency verified in PostgreSQL', () => {
+  const ledgerEntries = (accountId, direction) => prisma.ledgerEntry.count({ where: { accountId, ...(direction && { direction }) } });
+  const ok = (results) => results.filter((r) => r.status === 201);
+
+  test('proof the requests REALLY overlap: PostgreSQL sees all 12 waiting for the same lock at once', async () => {
+    const holder = await createUser();
+    const account = await fundedAccount(holder, 100000); // ₹1,000
+    const N = 12;
+
+    // Hold the account's row lock from outside, so every request has to queue behind it.
+    let release;
+    const released = new Promise((resolve) => (release = resolve));
+    const outsider = prisma.$transaction(
+      async (tx) => {
+        await tx.$queryRaw`SELECT id FROM accounts WHERE id = ${account.id}::uuid FOR UPDATE`;
+        await released;
+      },
+      { timeout: 30000, maxWait: 5000 }
+    );
+    await sleep(100);
+
+    const requests = Promise.all(Array.from({ length: N }, () => withdraw(holder, account.id, 10000)));
+
+    // Ask PostgreSQL how many sessions are blocked waiting for a lock right now.
+    let waiting = 0;
+    for (let i = 0; i < 200 && waiting < N; i++) {
+      const [row] = await prisma.$queryRaw`
+        SELECT COUNT(*)::int AS n FROM pg_stat_activity
+        WHERE datname = current_database() AND wait_event_type = 'Lock'`;
+      waiting = row.n;
+      if (waiting < N) await sleep(25);
+    }
+    release();
+    await outsider;
+    const results = await requests;
+
+    expect(waiting).toBe(N); // all 12 were in flight at the same moment – not one after another
+    expect(ok(results)).toHaveLength(10); // ₹1,000 / ₹100
+    expect(results.filter((r) => r.status === 422)).toHaveLength(2);
+    expect(await balanceOf(account.id)).toBe(0n);
+    await expectHealthyLedger();
+  });
+
+  test('40 deposits into ONE account at the same moment → every rupee arrives, nothing is lost', async () => {
+    const holder = await createUser();
+    const account = await createAccount(holder);
+    const systemId = (await prisma.account.findFirst({ where: { type: 'SYSTEM' } })).id;
+    const systemBefore = await balanceOf(systemId);
+    const amounts = Array.from({ length: 40 }, (_, i) => 137 * (i + 1)); // all different
+    const total = BigInt(amounts.reduce((sum, a) => sum + a, 0));
+
+    const results = await Promise.all(amounts.map((amount) => deposit(holder, account.id, amount)));
+
+    expect(ok(results)).toHaveLength(40);
+    expect(await balanceOf(account.id)).toBe(total); // a lost update would leave less
+    expect(await ledgerEntries(account.id, 'CREDIT')).toBe(40);
+    expect(await balanceOf(systemId)).toBe(systemBefore - total); // the other side of every deposit
+    await expectHealthyLedger();
+  });
+
+  test('30 deposits and 30 withdrawals on one account at the same moment → no lost updates', async () => {
+    const holder = await createUser();
+    const account = await fundedAccount(holder, 50000); // ₹500: enough even if all withdrawals run first
+
+    const jobs = [];
+    for (let i = 0; i < 30; i++) jobs.push(deposit(holder, account.id, 1000), withdraw(holder, account.id, 1000));
+    const results = await Promise.all(jobs);
+
+    expect(ok(results)).toHaveLength(60);
+    expect(await balanceOf(account.id)).toBe(50000n);
+    expect(await ledgerEntries(account.id)).toBe(61); // 1 initial deposit + 60
+    await expectHealthyLedger();
+  });
+
+  test('20 transfers of ₹100 from a ₹1,000 account to 4 receivers at once → exactly 10 succeed', async () => {
+    const holder = await createUser();
+    const from = await fundedAccount(holder, 100000);
+    const receivers = await Promise.all([0, 1, 2, 3].map(() => createAccount(holder)));
+
+    const results = await Promise.all(Array.from({ length: 20 }, (_, i) => transfer(holder, from.id, receivers[i % 4].id, 10000)));
+
+    expect(ok(results)).toHaveLength(10);
+    expect(results.filter((r) => r.status === 422).every((r) => r.body.error.code === 'INSUFFICIENT_FUNDS')).toBe(true);
+    expect(await balanceOf(from.id)).toBe(0n);
+    let received = 0n;
+    for (const r of receivers) {
+      const balance = await balanceOf(r.id);
+      expect(BigInt(await ledgerEntries(r.id, 'CREDIT')) * 10000n).toBe(balance); // one credit row per ₹100 received
+      received += balance;
+    }
+    expect(received).toBe(100000n); // everything that left arrived – nothing more
+    expect(await prisma.auditLog.count({ where: { actorId: holder.user.id, reason: 'INSUFFICIENT_FUNDS' } })).toBe(10);
+    await expectHealthyLedger();
+  });
+
+  test('30 transfers A→B in the same direction at once → exact balances on both sides', async () => {
+    const holder = await createUser();
+    const a = await fundedAccount(holder, 100000);
+    const b = await createAccount(holder);
+
+    const results = await Promise.all(Array.from({ length: 30 }, () => transfer(holder, a.id, b.id, 1000)));
+
+    expect(ok(results)).toHaveLength(30);
+    expect(await balanceOf(a.id)).toBe(70000n);
+    expect(await balanceOf(b.id)).toBe(30000n);
+    expect(await ledgerEntries(a.id, 'DEBIT')).toBe(30);
+    expect(await ledgerEntries(b.id, 'CREDIT')).toBe(30);
+    await expectHealthyLedger();
+  });
+
+  test('rollback under load: 10 transfers crash mid-way while 10 others succeed → only the good ones remain', async () => {
+    const holder = await createUser();
+    const from = await fundedAccount(holder, 100000);
+    const broken = await createAccount(holder); // writing a credit to this account will fail
+    const healthy = await createAccount(holder);
+
+    await prisma.$executeRawUnsafe(`
+      CREATE OR REPLACE FUNCTION test_fail_credit_load() RETURNS trigger AS $$
+      BEGIN RAISE EXCEPTION 'simulated crash under load'; END; $$ LANGUAGE plpgsql`);
+    await prisma.$executeRawUnsafe(`
+      CREATE TRIGGER test_fail_credit_load BEFORE INSERT ON ledger_entries
+      FOR EACH ROW WHEN (NEW."accountId" = '${broken.id}'::uuid) EXECUTE FUNCTION test_fail_credit_load()`);
+    let results;
+    try {
+      const jobs = [];
+      for (let i = 0; i < 10; i++) jobs.push(transfer(holder, from.id, broken.id, 1000), transfer(holder, from.id, healthy.id, 1000));
+      results = await Promise.all(jobs);
+    } finally {
+      await prisma.$executeRawUnsafe('DROP TRIGGER IF EXISTS test_fail_credit_load ON ledger_entries');
+      await prisma.$executeRawUnsafe('DROP FUNCTION IF EXISTS test_fail_credit_load()');
+    }
+
+    const toBroken = results.filter((_, i) => i % 2 === 0);
+    const toHealthy = results.filter((_, i) => i % 2 === 1);
+    expect(toBroken.every((r) => r.status === 500)).toBe(true);
+    expect(toHealthy.every((r) => r.status === 201)).toBe(true);
+    expect(await balanceOf(from.id)).toBe(90000n); // only the 10 successful ₹10 transfers left
+    expect(await balanceOf(healthy.id)).toBe(10000n);
+    expect(await balanceOf(broken.id)).toBe(0n);
+    expect(await ledgerEntries(broken.id)).toBe(0);
+    expect(await prisma.transaction.count({ where: { toAccountId: broken.id } })).toBe(0);
+    await expectHealthyLedger();
+  });
+});
+
+test('the ledger balances after every concurrency test (app check + independent SQL check)', async () => {
   const result = await verifyLedger();
   expect(result.checks).toEqual({ balancesMatchLedger: true, everyTransactionBalanced: true, runningBalancesConsistent: true, moneyConserved: true });
+  await expectHealthyLedger();
 });
