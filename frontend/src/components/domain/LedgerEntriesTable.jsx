@@ -1,3 +1,4 @@
+import { Link } from 'react-router'
 import DataTable from '../ui/DataTable'
 import Badge from '../ui/Badge'
 import { TransactionTypeBadge } from './StatusBadges'
@@ -6,12 +7,21 @@ import { formatDateTime } from '../../utils/format'
 // Raw double-entry ledger rows. showAccount=false on an account statement
 // (every row is the same account there). compact drops type, counterparty and
 // entry columns for narrow dashboard cards – Debit/Credit already show the direction.
-export default function LedgerEntriesTable({ items = [], loading, showAccount = true, compact = false, empty = 'No ledger entries yet.' }) {
+export default function LedgerEntriesTable({ items = [], loading, showAccount = true, showReference = true, compact = false, empty = 'No ledger entries yet.' }) {
   const columns = [
     { key: 'entryNumber', header: '#', render: (e) => <span className="font-mono text-xs text-slate-500">{e.entryNumber}</span> },
     { key: 'createdAt', header: 'Time', render: (e) => <span className="text-slate-600">{formatDateTime(e.createdAt)}</span> },
     showAccount && { key: 'accountNumber', header: 'Account', render: (e) => <span className="font-mono text-xs">{e.accountNumber}</span> },
-    { key: 'reference', header: 'Reference', render: (e) => <span className="font-mono text-xs">{e.transaction?.reference}</span> },
+    showReference && {
+      key: 'reference',
+      header: 'Reference',
+      render: (e) =>
+        e.transaction && (
+          <Link to={`/transactions/${e.transaction.id}`} className="font-mono text-xs font-medium text-brand-700 hover:underline">
+            {e.transaction.reference}
+          </Link>
+        ),
+    },
     !compact && { key: 'type', header: 'Type', render: (e) => e.transaction && <TransactionTypeBadge type={e.transaction.type} /> },
     !compact && {
       key: 'counterparty',

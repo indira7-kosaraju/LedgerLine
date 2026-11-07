@@ -72,7 +72,8 @@ npm run dev             # http://localhost:5173 – the backend must be running 
 | POST | /api/transactions/deposit | ACCOUNT_HOLDER (own account) | `{ "accountId", "amountPaise", "description"? }` – max ₹1,00,000 |
 | POST | /api/transactions/withdraw | ACCOUNT_HOLDER (own account) | `{ "accountId", "amountPaise", "description"? }` |
 | POST | /api/transactions/transfer | ACCOUNT_HOLDER (own source) | `{ "fromAccountId", "toAccountId" \| "toAccountNumber", "amountPaise", "description"? }` |
-| GET | /api/transactions | Any role | Holder: own. Admin/Auditor: all. Filters `accountId`, `type` |
+| GET | /api/transactions | Any role | Holder: own. Admin/Auditor: all. Filters `accountId`, `type`, `q` (reference) |
+| GET | /api/transactions/:id | Involved holder, ADMIN, AUDITOR | Transaction + ledger entries (holders: only entries on their own accounts) |
 | GET | /api/ledger/entries | ADMIN, AUDITOR | Raw ledger; filters `accountId`, `transactionId` |
 | GET | /api/ledger/verify | ADMIN, AUDITOR | Proves balances = ledger and Σ balances = 0 |
 
@@ -112,7 +113,7 @@ Day 2:
 - [x] Task 1 – Frontend setup (React, Vite, Tailwind, Router, Axios)
 - [x] Task 2 – Login and registration
 - [x] Task 3 – Role-based dashboards
-- [ ] Task 4 – Money movement pages
+- [x] Task 4 – Money movement pages
 - [ ] Task 5 – Backend integration
 - [ ] Task 6 – Idempotency
 - [ ] Task 7 – Concurrency and ledger security

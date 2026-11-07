@@ -336,3 +336,44 @@ information the user isn't authorized to see).
 **Related commit:** `feat: implement role-based dashboards`
 
 ---
+
+## Entry 10 – Day 2 Task 4: Money movement pages
+
+**Date:** 2026-11-07
+
+**Prompt used:** "task4" (Day 2 master prompt Task 4: Deposit, Withdraw, Transfer, Transaction Details, Transaction History;
+validate inputs, confirm before submitting, loading state, success, meaningful errors, refresh balances; never calculate or
+approve financial transactions in React).
+
+**AI-generated solution:**
+- **Backend additions:** `GET /api/transactions/:id` – admin/auditor see everything; an account holder only if one side is
+  their account, and only the ledger entries on their own accounts (the other side's `balanceAfter` would reveal someone
+  else's balance); `initiatedBy` hidden from the receiver; uninvolved users get 403 + audit row (`TXN_VIEW / NOT_INVOLVED`).
+  `GET /api/transactions?q=` searches by reference.
+- **Frontend:** one `MoneyMovementPage` for `/deposit`, `/withdraw`, `/transfer` (account holders only): account select with
+  balances, transfer to own account or any account number, amount field with ₹ prefix, review → confirmation dialog →
+  receipt with reference and new balance; balances reloaded after every attempt. `/transactions` history (reference search,
+  type and account filters, pagination, +/− for holders) and `/transactions/:id` details. Quick actions on the holder
+  dashboard and on the owner's account page (preselect the account).
+- `utils/money.js` `parseAmount` turns "1,250.50" into "125050" paise by moving the decimal point as text – no floating
+  point. Balance, limits, ownership and status are only checked by the backend.
+- After a network error / 5xx the form says the transaction "may or may not have gone through" and links to the history,
+  instead of inviting a blind retry (idempotency comes in Task 6).
+
+**Problems found (actual observations):**
+- Parser checked with 18 inputs ("1,250.5" → 125050, "0.1" → 10, "007" → 700; "-5", "1e5", "10.555", ".5", "0" rejected).
+- Browser test (31 checks, fresh user, real forms): Day 1 scenario through the UI gives ₹5,500.00; validation, server
+  refusals (insufficient funds, unknown account), cancel sends nothing, **double-click on Confirm creates exactly one
+  transaction**, simulated network failure shows the uncertainty warning, privacy on details, auditor sees both entries,
+  auditor on /deposit → /forbidden; ledger verify still OK; DB balances A1 ₹5,239.50 / A2 ₹250.50 as expected.
+- One test failure was my test again (counted table rows before React rendered the new page) – fixed the wait.
+- Wording bug from screenshots: "Withdraw of ₹1,000.00 completed" / "Review withdraw" – added a separate noun ("withdrawal").
+- First privacy note said "another customer's account" – wrong for deposits/withdrawals, where the other side is the SYSTEM
+  account. Reworded to "an account that isn't yours".
+
+**My corrections:**
+- _(fill in after reviewing)_
+
+**Related commit:** `feat: implement deposit withdrawal and transfer interfaces`
+
+---

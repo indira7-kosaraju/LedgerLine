@@ -1,4 +1,6 @@
 import { useMemo, useState } from 'react'
+import { Link } from 'react-router'
+import QuickActions from '../../components/domain/QuickActions'
 import { useAuth } from '../../hooks/useAuth'
 import { useApi } from '../../hooks/useApi'
 import { useToast } from '../../hooks/useToast'
@@ -65,6 +67,13 @@ export default function HolderDashboard() {
         <StatCard label="Transactions" value={recent.data?.total} hint="All time" />
       </div>
 
+      {activeCount > 0 && (
+        <section className="mt-8">
+          <h2 className="mb-3 text-base font-semibold text-slate-900">Move money</h2>
+          <QuickActions />
+        </section>
+      )}
+
       <section className="mt-8">
         <h2 className="mb-3 text-base font-semibold text-slate-900">Your accounts</h2>
         {accounts.data && items.length === 0 ? (
@@ -87,7 +96,15 @@ export default function HolderDashboard() {
       </section>
 
       <Card className="mt-8">
-        <CardHeader title="Recent transactions" description="Your latest money movements" />
+        <CardHeader
+          title="Recent transactions"
+          description="Your latest money movements"
+          action={
+            <Link to="/transactions" className="text-sm font-medium text-brand-600 hover:text-brand-700">
+              View all →
+            </Link>
+          }
+        />
         <ErrorState error={recent.error} onRetry={recent.reload} className="m-4" />
         <TransactionsTable items={recent.data?.items} loading={recent.loading} ownAccountIds={ownIds} compact />
       </Card>

@@ -17,4 +17,8 @@ async function list(req, res) {
   res.status(200).json(await transactionService.listTransactions(req.user, req.validatedQuery));
 }
 
-module.exports = { deposit, withdraw, transfer, list };
+async function getById(req, res) {
+  res.status(200).json(await transactionService.getTransaction(req.user, req.validatedParams.id, requestContext(req)));
+}
+
+module.exports = { deposit, withdraw, transfer, list, getById };

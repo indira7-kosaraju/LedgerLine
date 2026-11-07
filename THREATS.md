@@ -53,4 +53,9 @@ Running list of threats and how each one is handled. Updated as features are bui
 | 45 | Money summed in the browser (rounding, tampering) | Totals computed by PostgreSQL (`SUM`) and sent as formatted strings | Done (Day 2 Task 3) |
 | 46 | Dashboard calling APIs the role can't use | Each dashboard only calls its role's APIs; backend still returns 403 for anything else | Done (Day 2 Task 3) |
 
+| 47 | Recipient's balance / identity leaked through transaction details | Holders only receive ledger entries on their own accounts; `initiatedBy` hidden from receivers; uninvolved users get 403 (audited) | Done (Day 2 Task 4) |
+| 48 | Floating-point errors from typed amounts | Amount parsed as text (decimal point moved as a string) and sent as paise; backend re-validates | Done (Day 2 Task 4) |
+| 49 | Accidental double submission (double-click) | Confirm button disabled while the request runs (tested: one transaction) – **UI only**, real protection is idempotency | Partial – Task 6 |
+| 50 | User retries after a timeout and pays twice | UI warns "may or may not have gone through" and links to history | Partial – Task 6 (idempotency) |
+
 > **The system is not claimed to be fully secure.** Idempotency, formal concurrency tests and automated adversarial tests are Day 2 work.

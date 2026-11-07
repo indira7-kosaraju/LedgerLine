@@ -57,6 +57,21 @@ export const AlertCircleIcon = (p) => (
     <path d="M12 8v5M12 16h.01" />
   </Icon>
 )
+export const ArrowDownIcon = (p) => (
+  <Icon {...p}>
+    <path d="M12 4v13M6 11l6 6 6-6M5 21h14" />
+  </Icon>
+)
+export const ArrowUpIcon = (p) => (
+  <Icon {...p}>
+    <path d="M12 17V4M6 10l6-6 6 6M5 21h14" />
+  </Icon>
+)
+export const TransferIcon = (p) => (
+  <Icon {...p}>
+    <path d="M4 8h14l-4-4M20 16H6l4 4" />
+  </Icon>
+)
 export const PlusIcon = (p) => (
   <Icon {...p}>
     <path d="M12 5v14M5 12h14" />

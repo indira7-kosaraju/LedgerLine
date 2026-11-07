@@ -25,8 +25,28 @@ function AccountRef({ account }) {
 // compact: hides reference + description so the amount stays visible in narrow dashboard cards.
 export default function TransactionsTable({ items = [], loading, ownAccountIds, compact = false, empty = 'No transactions yet.' }) {
   const columns = [
-    { key: 'createdAt', header: 'Date', render: (t) => <span className="text-slate-600">{formatDateTime(t.createdAt)}</span> },
-    !compact && { key: 'reference', header: 'Reference', render: (t) => <span className="font-mono text-xs">{t.reference}</span> },
+    {
+      key: 'createdAt',
+      header: 'Date',
+      // In compact mode the date is the link to the details page (the reference column is hidden).
+      render: (t) =>
+        compact ? (
+          <Link to={`/transactions/${t.id}`} className="text-brand-700 hover:underline">
+            {formatDateTime(t.createdAt)}
+          </Link>
+        ) : (
+          <span className="text-slate-600">{formatDateTime(t.createdAt)}</span>
+        ),
+    },
+    !compact && {
+      key: 'reference',
+      header: 'Reference',
+      render: (t) => (
+        <Link to={`/transactions/${t.id}`} className="font-mono text-xs font-medium text-brand-700 hover:underline">
+          {t.reference}
+        </Link>
+      ),
+    },
     { key: 'type', header: 'Type', render: (t) => <TransactionTypeBadge type={t.type} /> },
     {
       key: 'route',

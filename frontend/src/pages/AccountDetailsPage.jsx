@@ -18,6 +18,7 @@ import FullPageSpinner from '../components/ui/FullPageSpinner'
 import { Card, CardBody, CardHeader } from '../components/ui/Card'
 import { AccountStatusBadge } from '../components/domain/StatusBadges'
 import LedgerEntriesTable from '../components/domain/LedgerEntriesTable'
+import QuickActions from '../components/domain/QuickActions'
 
 const LIMIT = 20
 
@@ -202,6 +203,13 @@ export default function AccountDetailsPage() {
           </CardBody>
         </Card>
       </div>
+
+      {/* The owner can move money from an active account – shortcuts preselect this account. */}
+      {isOwner && a.status === 'ACTIVE' && can(user.role, 'transactions:create') && (
+        <div className="mt-6">
+          <QuickActions accountId={a.id} />
+        </div>
+      )}
 
       <Card className="mt-6">
         <CardHeader title="Statement" description="Every ledger entry for this account, newest first" />

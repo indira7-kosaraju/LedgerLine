@@ -9,6 +9,7 @@ const {
   transferSchema,
   listTransactionsQuerySchema,
 } = require('../utils/schemas/transaction.schemas');
+const { idParamSchema } = require('../utils/schemas/common.schemas');
 const transactionController = require('../controllers/transaction.controller');
 
 const router = Router();
@@ -28,6 +29,13 @@ router.get(
   requirePermission('transactions:read:own', 'transactions:read:any'),
   validate(listTransactionsQuerySchema, 'query'),
   transactionController.list
+);
+
+router.get(
+  '/:id',
+  requirePermission('transactions:read:own', 'transactions:read:any'),
+  validate(idParamSchema, 'params'),
+  transactionController.getById
 );
 
 module.exports = router;

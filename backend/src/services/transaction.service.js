@@ -269,13 +269,14 @@ async function transfer(user, { fromAccountId, toAccountId, toAccountNumber, amo
 
 // ACCOUNT_HOLDER: only transactions touching their own accounts.
 // ADMIN / AUDITOR: all transactions.
-async function listTransactions(user, { page, limit, accountId, type }) {
+async function listTransactions(user, { page, limit, accountId, type, q }) {
   const filters = [];
   if (!hasPermission(user.role, 'transactions:read:any')) {
     filters.push({ OR: [{ fromAccount: { ownerId: user.id } }, { toAccount: { ownerId: user.id } }] });
   }
   if (accountId) filters.push({ OR: [{ fromAccountId: accountId }, { toAccountId: accountId }] });
   if (type) filters.push({ type });
+  if (q) filters.push({ reference: { contains: q, mode: 'insensitive' } });
   const where = filters.length ? { AND: filters } : {};
 
   const accountRef = { select: { id: true, accountNumber: true } };
@@ -293,4 +294,54 @@ async function listTransactions(user, { page, limit, accountId, type }) {
   return { items: rows.map(serializeTransaction), page, limit, total };
 }
 
-module.exports = { deposit, withdraw, transfer, listTransactions, serializeTransaction };
+// One transaction with its ledger entries.
+// ADMIN / AUDITOR: everything. ACCOUNT_HOLDER: only if one side is their account, and
+// only the ledger entries on THEIR accounts – the other side's balanceAfter would reveal
+// someone else's balance.
+async function getTransaction(user, id, ctx) {
+  const accountRef = { select: { id: true, accountNumber: true, ownerId: true } };
+  const txn = await prisma.transaction.findUnique({
+    where: { id },
+    include: {
+      fromAccount: accountRef,
+      toAccount: accountRef,
+      initiatedBy: { select: { id: true, fullName: true, email: true } },
+      ledgerEntries: { orderBy: { entryNumber: 'asc' }, include: { account: { select: { accountNumber: true, ownerId: true } } } },
+    },
+  });
+  if (!txn) throw new AppError(404, 'Transaction not found', 'NOT_FOUND');
+
+  const seesAll = hasPermission(user.role, 'transactions:read:any');
+  const involved = txn.fromAccount.ownerId === user.id || txn.toAccount.ownerId === user.id;
+  if (!seesAll && !involved) {
+    await audit.recordSafe({
+      actorId: user.id, action: 'TXN_VIEW', outcome: 'REFUSED', entityType: 'Transaction', entityId: txn.id, reason: 'NOT_INVOLVED', ...ctx,
+    });
+    throw new AppError(403, 'You do not have access to this transaction', 'FORBIDDEN');
+  }
+
+  let initiatedBy = null;
+  if (seesAll) initiatedBy = txn.initiatedBy;
+  else if (txn.initiatedById === user.id) initiatedBy = { id: user.id, fullName: user.fullName, email: user.email };
+
+  const visible = txn.ledgerEntries.filter((e) => seesAll || e.account.ownerId === user.id);
+
+  return {
+    // serializeTransaction only exposes account id + number, never ownerId.
+    transaction: { ...serializeTransaction(txn), initiatedBy },
+    ledgerEntries: visible.map((e) => ({
+        id: e.id,
+        entryNumber: e.entryNumber.toString(),
+        accountId: e.accountId,
+        accountNumber: e.account.accountNumber,
+        direction: e.direction,
+        amount: toMoney(e.amount),
+        balanceAfter: toMoney(e.balanceAfter),
+        createdAt: e.createdAt,
+      })),
+    // How many entries belong to other people's accounts (shown as a note, not the data).
+    entriesHidden: txn.ledgerEntries.length - visible.length,
+  };
+}
+
+module.exports = { deposit, withdraw, transfer, listTransactions, getTransaction, serializeTransaction };

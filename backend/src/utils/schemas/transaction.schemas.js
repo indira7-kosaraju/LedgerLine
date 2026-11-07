@@ -40,6 +40,8 @@ const listTransactionsQuerySchema = z.strictObject({
   ...paginationSchema,
   accountId: z.uuid().optional(),
   type: z.enum(['DEPOSIT', 'WITHDRAWAL', 'TRANSFER']).optional(),
+  // Search by transaction reference, e.g. "TXN-20261107-9F3A"
+  q: z.string().trim().min(1).max(40).optional(),
 });
 
 const statementQuerySchema = z.strictObject({
