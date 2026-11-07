@@ -125,13 +125,25 @@ Error handling: every request goes through `api/client.js`, which turns failures
 | View audit logs (incl. refused attempts) | ✅ | – | ✅ |
 | Manage users | ✅ | – | – |
 
+## Ledger integrity (enforced by PostgreSQL)
+
+| Rule | Enforced by |
+|---|---|
+| No negative customer balance | `CHECK` constraint |
+| Ledger entries, transactions and audit logs can't be changed, deleted or truncated | triggers |
+| Each new entry continues its account's running balance | `ledger_entries_check_chain` trigger |
+| At commit: every transaction has exactly one matching DEBIT and CREDIT | deferred `transactions_must_balance` trigger |
+| At commit: every account balance equals its latest ledger balance | deferred `accounts_balance_matches_ledger` trigger |
+| Concurrent movements on the same account are serialized | `SELECT … FOR UPDATE` in sorted id order + deadlock retry |
+| A request is never processed twice | `Idempotency-Key` + `UNIQUE(userId, key)` in the same DB transaction |
+
 ## Tests
 
 ```bash
 cd backend
 cp .env.test.example .env.test          # once – point it at a separate database
 createdb -O ledgerline_app ledgerline_test   # once
-npm test                                # Jest: unit + integration (Supertest, test DB)
+npm test                                # Jest: 85 tests – unit, idempotency, concurrency, ledger security
 npm run smoke                           # end-to-end against the running dev server
 ```
 
@@ -151,7 +163,7 @@ Day 2:
 - [x] Task 4 – Money movement pages
 - [x] Task 5 – Backend integration
 - [x] Task 6 – Idempotency
-- [ ] Task 7 – Concurrency and ledger security
+- [x] Task 7 – Concurrency and ledger security
 - [ ] Task 8 – Testing and final review
 
 > The system is **not** yet claimed to be secure. Idempotency, concurrency testing

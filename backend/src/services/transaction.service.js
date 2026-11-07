@@ -67,12 +67,16 @@ function isRetryable(err) {
   return err.code === 'P2010' && /40P01|40001/.test(String(err.meta?.code ?? err.message));
 }
 
+// Retries the whole transaction up to `attempts` times on a deadlock / serialization
+// failure, waiting a short random time first so the competing transactions don't
+// collide again at exactly the same moment.
 async function withRetry(fn, attempts = 3) {
   for (let i = 1; ; i++) {
     try {
       return await fn();
     } catch (err) {
       if (i >= attempts || !isRetryable(err)) throw err;
+      await new Promise((resolve) => setTimeout(resolve, 10 + Math.floor(Math.random() * 40) * i));
     }
   }
 }
@@ -372,4 +376,4 @@ async function getTransaction(user, id, ctx) {
   };
 }
 
-module.exports = { deposit, withdraw, transfer, listTransactions, getTransaction, serializeTransaction };
+module.exports = { deposit, withdraw, transfer, listTransactions, getTransaction, serializeTransaction, withRetry, isRetryable };

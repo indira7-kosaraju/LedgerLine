@@ -15,8 +15,8 @@ Running list of threats and how each one is handled. Updated as features are bui
 | 9 | Users accessing other users' accounts | `canAccessAccount` ownership check on the backend, refusals audited; unit tested | Done – account endpoints (Task 5), transactions (Task 6) |
 | 10 | Negative balances / partial transfers | Single DB transaction per movement, `FOR UPDATE` row locks, balance check on locked row, DB CHECK `balance >= 0`; rollback tested | Done (Task 6) |
 | 11 | Duplicate payments from retried requests | Required `Idempotency-Key`; key row inserted in the same DB transaction as the movement; `UNIQUE(userId, key)` | Done (Day 2 Task 6) |
-| 12 | Race conditions / deadlocks on concurrent transfers | Locks taken in sorted id order; retry on 40P01/40001; smoke-tested (20 parallel withdrawals, 20 opposite transfers) | Done (Task 6) – formal tests Day 2 |
-| 13 | Ledger history tampered with (edit/delete entries) | PostgreSQL triggers block UPDATE/DELETE on `ledger_entries` and `audit_logs` | Done (Task 2) |
+| 12 | Race conditions / deadlocks on concurrent transfers | Sorted lock order; retry with jitter on 40P01/40001/P2034 (tested with a real deadlock); 30 Jest concurrency tests | Done (Day 2 Task 7) |
+| 13 | Ledger history tampered with (edit/delete/truncate) | Triggers block UPDATE/DELETE/TRUNCATE on `ledger_entries`, `audit_logs` and `transactions` | Done (Day 2 Task 7) |
 | 14 | Invalid money values (0, negative, self-transfer) reach the DB | CHECK constraints: amount > 0, from ≠ to | Done (Task 2) |
 | 15 | Floating-point rounding errors on money | All amounts stored as BigInt paise | Done (Task 2) |
 | 16 | App compromise gives full DB control | App connects as dedicated `ledgerline_app` role, not the superuser | Done (Task 2) |
@@ -38,7 +38,7 @@ Running list of threats and how each one is handled. Updated as features are bui
 | 32 | Malformed amounts (0, negative, decimals, `1e5`, huge) | Zod: integer or digit string → BigInt, > 0; policy limits per operation | Done (Task 6) |
 | 33 | Refused attempts leave no trace (rolled back with the transaction) | Refusals audited outside the transaction; validation failures on money routes audited too | Done (Task 6) |
 | 34 | Recipient balance leaked to sender | Transfer response only includes the caller's account balance | Done (Task 6) |
-| 35 | Ledger silently drifts from balances | `GET /api/ledger/verify` recomputes balances, per-txn balance, running balances, and Σ balances = 0 | Done (Task 6) |
+| 35 | Ledger silently drifts from balances | Prevented by the DB: running-balance chain trigger + commit-time checks (balance = ledger, every transaction balanced); `/api/ledger/verify` as an independent audit | Done (Day 2 Task 7) |
 | 36 | Debug info (paths, code) leaked in errors | `NODE_ENV` now defaults to `production`; debug only when explicitly `development` | Done (Task 6) |
 | 37 | Duplicate money movement on client retry | Idempotency (see #11); tested: 10 simultaneous identical requests → 1 transaction | Done (Day 2 Task 6) |
 | 38 | SYSTEM account row is a lock hotspot (all deposits/withdrawals serialize on it) | Accepted for now; could shard SYSTEM accounts later | Known limitation |
@@ -66,5 +66,9 @@ Running list of threats and how each one is handled. Updated as features are bui
 | 55 | Another user's key interferes | Keys are scoped per user (`UNIQUE(userId, key)`) | Done (Day 2 Task 6) |
 | 56 | Tests accidentally run against real data | `.env.test` + setup refuses any database not named `ledgerline_test` | Done (Day 2 Task 6) |
 | 57 | Idempotency table grows forever | Keys expire after 24 h and are reused; no scheduled cleanup job yet | Known limitation |
+
+| 58 | Lost update (two requests read the same balance) if the app lock were ever missing | Chain trigger rejects it – proven by removing `FOR UPDATE` in a mutation test | Done (Day 2 Task 7) |
+| 59 | Money created by SQL (`UPDATE accounts SET balance = …`) | Commit-time trigger: balance must equal the latest ledger balance | Done (Day 2 Task 7) |
+| 60 | Database superuser bypass (can disable triggers) | Out of scope: the app uses a non-superuser role; protect superuser credentials operationally | Accepted risk |
 
 > **The system is not claimed to be fully secure.** Idempotency, formal concurrency tests and automated adversarial tests are Day 2 work.

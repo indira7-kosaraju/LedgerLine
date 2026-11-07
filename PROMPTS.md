@@ -456,3 +456,47 @@ key rejected, simultaneous same-key requests handled, no duplicate money movemen
 **Related commit:** `feat: implement idempotent financial transactions`
 
 ---
+
+## Entry 13 – Day 2 Task 7: Concurrency control and ledger integrity
+
+**Date:** 2026-11-07
+
+**Prompt used:** "task7" (Day 2 master prompt Task 7: review and improve transaction safety; ₹1,000 balance with ₹800 + ₹700
+simultaneous withdrawals → only one succeeds; row locking, atomic updates, consistent lock order, deadlock handling, rollback,
+no negative balances, balanced and append-only ledger, audited refusals; never claim a feature works without verifying it).
+
+**Review findings (before changes):** row locks, sorted lock order, atomic transactions and CHECK constraints were in place.
+Gaps: `TRUNCATE` bypassed the append-only row triggers; the `transactions` table could be UPDATEd/DELETEd; ledger balance and
+"balance = ledger" were only checked after the fact by `/ledger/verify`; the Day 1 deadlock retry had never been tested;
+concurrency tests were one-off scripts.
+
+**AI-generated solution:**
+- New migration `20261107140000_ledger_integrity_triggers` (triggers only, no schema change):
+  transactions append-only; `TRUNCATE` blocked on ledger_entries, audit_logs, transactions; **running-balance chain** check on
+  every new ledger entry (locks the account row, compares with the previous `balanceAfter`); **deferred** commit-time checks
+  that each account's balance equals its latest ledger balance and that each new transaction has exactly one matching DEBIT and CREDIT.
+- `withRetry` now waits a short random time before retrying; `withRetry` / `isRetryable` exported for tests.
+- Jest suites: `concurrency.test.js` (30 tests) and `ledgerSecurity.test.js` (13 tests).
+
+**Problems found (actual observations):**
+- Spec scenario (₹1,000; ₹800 + ₹700 at once) repeated 20×: always exactly one 201 and one 422 INSUFFICIENT_FUNDS, ₹200 or
+  ₹300 left, one audited refusal each time. 50 × ₹100 from ₹1,000 → exactly 10 succeed. 30 A→B + 30 B→A and circular
+  A→B→C→A transfers → no deadlocks. 150-operation random storm → no 5xx, total exactly matches successful deposits − withdrawals.
+- **Deadlock handling verified for the first time:** a real PostgreSQL deadlock (opposite lock order) is classified retryable;
+  a transfer deliberately caught in a deadlock is retried and completes exactly once.
+- Rollback: forced failure on the CREDIT insert → 500; balances, transaction count, ledger count and idempotency key unchanged;
+  ERROR audited; retrying the same key afterwards moves the money once.
+- **Mutation test:** removing `FOR UPDATE` made 21 of 22 race tests fail. A probe showed what happened: both withdrawals read
+  ₹1,000 and the second would have written ₹300 (a lost update that creates money). The Day 1 CHECK constraint would NOT have
+  caught it (₹300 isn't negative) – the new **chain trigger rejected all 9** cases ("Ledger chain broken"). Code restored.
+- My first chain-tampering test also accepted a "duplicate key" error, so it could pass for the wrong reason. Rewrote it to
+  use a fresh transaction and match the exact chain-broken message.
+- Regression: Jest 85/85; smoke 54/54; UI 37/37, 31/31, 24/24, 12/12 – all against the real DB with the new triggers.
+  Real DB afterwards: sum of balances 0, no negative balances, 123 transactions / 246 ledger entries.
+
+**My corrections:**
+- _(fill in after reviewing)_
+
+**Related commit:** `feat: strengthen concurrency control and ledger integrity`
+
+---
