@@ -166,7 +166,7 @@ describe('Token validation', () => {
 
   test('the role inside a token is ignored – the role in the database counts', async () => {
     const { user } = await createUser('ACCOUNT_HOLDER');
-    const forgedRole = jwt.sign({ role: 'ADMIN' }, secret, { ...opts, subject: user.id }); // validly signed, fake role
+    const forgedRole = jwt.sign({ role: 'ADMIN', sv: 0 }, secret, { ...opts, subject: user.id }); // validly signed (current session version), fake role
     const res = await request(app).get('/api/admin/users').set('Authorization', `Bearer ${forgedRole}`);
     expect(res.status).toBe(403);
   });

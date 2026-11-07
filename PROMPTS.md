@@ -659,3 +659,45 @@ to existing tests. No application bug was found in this task.
 **Related commit:** `test: verify concurrent transaction safety`
 
 ---
+
+## Entry 18 – Day 3 Task 4: Security review
+
+**Date:** 2026-11-07
+
+**Prompt given to AI:** "start task4" (Day 3 Task 4: audit JWT, hashing, RBAC, ownership, SQL injection, validation, rate
+limiting, CORS, Helmet, env security, errors, data exposure, ledger protection, duplicates, replay, privilege escalation;
+try another user's account, an auditor-restricted operation, modifying ledger records; record actual results; fix confirmed
+vulnerabilities).
+
+**What AI generated:** `backend/tests/integration/security.test.js` (37 attack tests), `docs/SECURITY_AUDIT.md`
+(results per checklist item), a `sessionVersion` migration, `TRUST_PROXY`, `utils/escapeLike.js`, a `deepmerge-ts`
+override, and an updated smoke test.
+
+**What was incorrect or incomplete (actual findings in earlier AI-generated code):**
+1. **Token replay after logout** – logout only cleared the cookie; a copied token kept working (probe: 200 after logout).
+2. **Reactivation revived old tokens** – deactivate → reactivate made a pre-deactivation token valid again (probe: 200).
+3. **No `trust proxy`** – behind a hosting proxy every client would share one IP (shared login lockout, useless audit IPs).
+4. **LIKE wildcard injection** – a search for `%` returned every account (found by a failing security test).
+5. **Dependency advisory** GHSA-ggr8-5vv4-36mx in `deepmerge-ts` via the Prisma CLI (`npm audit`).
+6. Login built its response as "user minus passwordHash", which would have leaked the new `sessionVersion` (code review).
+
+**How it was identified:** items 1–3 with live requests during the review and before designing the fix; item 4 by a test
+asserting search results contain the search text; item 5 by `npm audit --omit=dev`; item 6 while changing the login code.
+
+**How it was corrected:** `sessionVersion` in the JWT (`sv`), raised on logout and on admin status changes (logout now signs
+out everywhere – documented trade-off); `TRUST_PROXY` hops (default 0, `true` forbidden); escaping `\ % _` in all searches;
+`overrides: { "deepmerge-ts": "8.0.2" }` instead of a breaking Prisma 7 upgrade (Prisma validate/generate/migrate/seed
+re-verified, `npm audit` → 0); explicit allow-list for public user fields. The smoke test was updated because logout now
+also revokes the Bearer token it reused – it checks that revocation and signs in again.
+
+**Proof:** mutation tests – removing the session check → 4 failures; removing the bump on status change → 1; removing LIKE
+escaping → 2. Live re-test: copied token after logout → 401 SESSION_REVOKED; with TRUST_PROXY=1 a client-invented
+`X-Forwarded-For` entry is ignored. Regression: Jest 261/261, frontend unit 12/12, Playwright 23/23, smoke 56/56,
+verify:db 13/13; no real secret in any project file or in the frontend bundle.
+
+**My corrections:**
+- _(fill in after reviewing)_
+
+**Related commit:** `security: strengthen authentication and financial access controls`
+
+---

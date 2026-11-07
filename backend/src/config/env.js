@@ -26,6 +26,10 @@ const envSchema = z.object({
   JWT_EXPIRES_IN: z.string().min(1).default('1h'),
   BCRYPT_SALT_ROUNDS: z.coerce.number().int().min(10).max(15).default(12),
   RATE_LIMIT_MAX: z.coerce.number().int().min(10).max(100000).default(600),
+  // How many proxies sit in front of the app (Render = 1; Vercel rewrite + Render = 2).
+  // 0 = trust none: X-Forwarded-For is ignored and req.ip is the direct connection.
+  // Never "true" – then anyone could fake their IP and get around rate limits.
+  TRUST_PROXY: z.coerce.number().int().min(0).max(5).default(0),
   // Failed logins per IP per 15 minutes, and registrations per IP per hour.
   // Raised only in .env.test so automated tests can create many users.
   AUTH_LOGIN_FAILURE_LIMIT: z.coerce.number().int().min(1).max(100000).default(10),

@@ -1,5 +1,6 @@
 const prisma = require('../config/prisma');
 const AppError = require('../utils/AppError');
+const escapeLike = require('../utils/escapeLike');
 const { publicUserFields } = require('./auth.service');
 const audit = require('./audit.service');
 
@@ -9,8 +10,8 @@ async function listUsers({ page, limit, role, status, q }) {
   if (status) where.isActive = status === 'ACTIVE';
   if (q) {
     where.OR = [
-      { email: { contains: q, mode: 'insensitive' } },
-      { fullName: { contains: q, mode: 'insensitive' } },
+      { email: { contains: escapeLike(q), mode: 'insensitive' } },
+      { fullName: { contains: escapeLike(q), mode: 'insensitive' } },
     ];
   }
   const [items, total] = await Promise.all([
@@ -40,7 +41,13 @@ async function setUserActive(admin, userId, isActive, ctx) {
   const existing = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, isActive: true } });
   if (!existing) throw new AppError(404, 'User not found', 'NOT_FOUND');
 
-  const user = await prisma.user.update({ where: { id: userId }, data: { isActive }, select: publicUserFields });
+  // Raising sessionVersion revokes every existing token of this user. Without it, a token
+  // stolen before a deactivation would start working again after reactivation.
+  const user = await prisma.user.update({
+    where: { id: userId },
+    data: { isActive, sessionVersion: { increment: 1 } },
+    select: publicUserFields,
+  });
 
   await audit.recordSafe({
     actorId: admin.id, action: 'USER_SET_STATUS', outcome: 'SUCCESS', entityType: 'User', entityId: userId,

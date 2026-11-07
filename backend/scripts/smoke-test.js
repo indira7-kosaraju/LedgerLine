@@ -68,7 +68,7 @@ async function main() {
   const login = await call('POST', '/auth/login', null, { email: `sender${run}@smoke.test`, password });
   check('login → 200 with token', login.status === 200 && Boolean(login.body?.token));
   check('wrong password → 401', (await call('POST', '/auth/login', null, { email: `sender${run}@smoke.test`, password: 'Wrong123x' })).status === 401);
-  const sender = login.body.token;
+  let sender = login.body.token;
   const receiver = reg2.body.token;
   check('GET /auth/me with token → 200', (await call('GET', '/auth/me', sender)).status === 200);
   check('GET /auth/me without token → 401', (await call('GET', '/auth/me')).status === 401);
@@ -91,6 +91,10 @@ async function main() {
   check('cookie POST without X-Requested-With → 403 (CSRF blocked)', forged.status === 403, (await forged.json()).error?.code);
   const logout = await fetch(`${BASE}/auth/logout`, { method: 'POST', headers: { Cookie: cookie, 'X-Requested-With': 'XMLHttpRequest' } });
   check('logout → 204 and clears cookie', logout.status === 204 && /ll_session=;/.test(logout.headers.get('set-cookie') || ''));
+  // Logout revokes ALL of this user's sessions on the server (Day 3 fix), including the Bearer token above.
+  check('after logout, the old token is revoked (replay blocked)', (await call('GET', '/auth/me', sender)).status === 401);
+  sender = (await call('POST', '/auth/login', null, { email: `sender${run}@smoke.test`, password })).body.token;
+  check('signing in again gives a working token', (await call('GET', '/auth/me', sender)).status === 200);
 
   section('Task 4 – Roles');
   const admin = (await call('POST', '/auth/login', null, { email: process.env.SEED_ADMIN_EMAIL, password: process.env.SEED_ADMIN_PASSWORD })).body?.token;

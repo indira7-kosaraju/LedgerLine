@@ -5,6 +5,7 @@ const prisma = require('../config/prisma');
 const policy = require('../config/policy');
 const { hasPermission } = require('../config/permissions');
 const AppError = require('../utils/AppError');
+const escapeLike = require('../utils/escapeLike');
 const { toMoney, formatPaise } = require('../utils/money');
 const { canAccessAccount, ACCOUNT_ACTIONS } = require('./accessControl.service');
 const audit = require('./audit.service');
@@ -308,7 +309,7 @@ async function listTransactions(user, { page, limit, accountId, type, q }) {
   }
   if (accountId) filters.push({ OR: [{ fromAccountId: accountId }, { toAccountId: accountId }] });
   if (type) filters.push({ type });
-  if (q) filters.push({ reference: { contains: q, mode: 'insensitive' } });
+  if (q) filters.push({ reference: { contains: escapeLike(q), mode: 'insensitive' } });
   const where = filters.length ? { AND: filters } : {};
 
   const accountRef = { select: { id: true, accountNumber: true } };

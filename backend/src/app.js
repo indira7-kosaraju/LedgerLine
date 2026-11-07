@@ -20,6 +20,11 @@ const csrfProtection = require('./middleware/csrfProtection');
 // Keeping it separate from server.js lets tests import the app directly.
 const app = express();
 
+// Behind a hosting proxy every request arrives from the proxy's IP. Trusting exactly
+// TRUST_PROXY hops makes req.ip the real client again (rate limits, audit logs) while a
+// client can't spoof it by adding its own X-Forwarded-For entries.
+app.set('trust proxy', env.TRUST_PROXY);
+
 // Safety net: JSON.stringify crashes on BigInt. Services convert money
 // explicitly (utils/money.js); this only catches anything we forgot.
 app.set('json replacer', (key, value) => (typeof value === 'bigint' ? value.toString() : value));

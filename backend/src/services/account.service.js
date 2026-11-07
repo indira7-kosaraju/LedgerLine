@@ -4,6 +4,7 @@ const prisma = require('../config/prisma');
 const { hasPermission } = require('../config/permissions');
 const AppError = require('../utils/AppError');
 const { toMoney } = require('../utils/money');
+const escapeLike = require('../utils/escapeLike');
 const { generateAccountNumber } = require('../utils/accountNumber');
 const audit = require('./audit.service');
 
@@ -86,9 +87,9 @@ async function listAccounts(user, { page, limit, ownerId, status, type, q }) {
   }
   if (q) {
     where.OR = [
-      { accountNumber: { contains: q, mode: 'insensitive' } },
-      { owner: { email: { contains: q, mode: 'insensitive' } } },
-      { owner: { fullName: { contains: q, mode: 'insensitive' } } },
+      { accountNumber: { contains: escapeLike(q), mode: 'insensitive' } },
+      { owner: { email: { contains: escapeLike(q), mode: 'insensitive' } } },
+      { owner: { fullName: { contains: escapeLike(q), mode: 'insensitive' } } },
     ];
   }
 

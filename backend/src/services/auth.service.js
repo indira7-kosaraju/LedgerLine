@@ -31,7 +31,7 @@ async function register({ email, password, fullName }, ctx) {
     user = await prisma.user.create({
       // role is not taken from the request: every self-registered user is an ACCOUNT_HOLDER.
       data: { email, passwordHash, fullName, role: 'ACCOUNT_HOLDER' },
-      select: publicUserFields,
+      select: { ...publicUserFields, sessionVersion: true },
     });
   } catch (err) {
     // P2002 = unique constraint failed → the email is already registered.
@@ -44,7 +44,13 @@ async function register({ email, password, fullName }, ctx) {
 
   await audit.recordSafe({ actorId: user.id, action: 'AUTH_REGISTER', outcome: 'SUCCESS', entityType: 'User', entityId: user.id, ...ctx });
 
-  return { user, token: signAccessToken(user) };
+  return { user: toPublicUser(user), token: signAccessToken(user) };
+}
+
+// Only the allow-listed fields ever leave the server – never passwordHash or sessionVersion,
+// and not any column added in the future by accident.
+function toPublicUser(user) {
+  return Object.fromEntries(Object.keys(publicUserFields).map((key) => [key, user[key]]));
 }
 
 async function login({ email, password }, ctx) {
@@ -69,8 +75,7 @@ async function login({ email, password }, ctx) {
 
   await audit.recordSafe({ actorId: user.id, action: 'AUTH_LOGIN', outcome: 'SUCCESS', entityType: 'User', entityId: user.id, ...ctx });
 
-  const { passwordHash, ...publicUser } = user;
-  return { user: publicUser, token: signAccessToken(user) };
+  return { user: toPublicUser(user), token: signAccessToken(user) };
 }
 
 async function getProfile(userId) {

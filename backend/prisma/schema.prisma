@@ -61,14 +61,17 @@ enum AuditOutcome {
 // ─────────────────────────── Models ───────────────────────────
 
 model User {
-  id           String   @id @default(uuid()) @db.Uuid
-  email        String   @unique
-  passwordHash String
-  fullName     String
-  role         Role     @default(ACCOUNT_HOLDER)
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id             String   @id @default(uuid()) @db.Uuid
+  email          String   @unique
+  passwordHash   String
+  fullName       String
+  role           Role     @default(ACCOUNT_HOLDER)
+  isActive       Boolean  @default(true)
+  // Copied into every JWT ("sv"). Raised on logout and when an admin changes the user's
+  // status, which instantly invalidates every token issued before.
+  sessionVersion Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   accounts        Account[]
   transactions    Transaction[]    @relation("InitiatedBy")

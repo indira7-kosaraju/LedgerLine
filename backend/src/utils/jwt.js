@@ -6,8 +6,11 @@ const AUDIENCE = 'ledgerline-api';
 // Pin the algorithm so an attacker can't switch it (e.g. to "none").
 const ALGORITHM = 'HS256';
 
+// `sv` = the user's sessionVersion when the token was issued. authenticate() rejects the
+// token as soon as the stored version is higher (after logout or a status change).
 function signAccessToken(user) {
-  return jwt.sign({ role: user.role }, env.JWT_SECRET, {
+  if (!Number.isInteger(user.sessionVersion)) throw new Error('signAccessToken needs user.sessionVersion');
+  return jwt.sign({ role: user.role, sv: user.sessionVersion }, env.JWT_SECRET, {
     subject: user.id, // "sub" claim = user id
     expiresIn: env.JWT_EXPIRES_IN,
     issuer: ISSUER,
