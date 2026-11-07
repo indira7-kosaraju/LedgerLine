@@ -39,7 +39,8 @@ or incomplete, how that was found, and how it was fixed.
 | 17 | 2026-11-07 | Day 3 · Concurrency testing | **concurrency** | `test: verify concurrent transaction safety` |
 | 18 | 2026-11-07 | Day 3 · Security review | security, replay | `security: strengthen authentication and financial access controls` |
 | 19 | 2026-11-07 | Day 3 · THREATS.md | threat model | `docs: add financial security threat model` |
-| 20 | 2026-11-07 | Day 3 · This log | documentation | `docs: update AI prompt log` (suggested) |
+| 20 | 2026-11-07 | Day 3 · This log | documentation | `docs: complete README and API documentation` (committed together with Task 7) |
+| 21 | 2026-11-07 | Day 3 · README and API docs | documentation, **idempotency** (demo seed) | `docs: complete README and API documentation` |
 
 ---
 
@@ -598,7 +599,46 @@ the AI's findings with first-person wording, and had empty "My corrections" plac
 **How it was corrected:** every entry now uses the required headings; attribution is explicit (what found each issue and who ran it);
 facts were kept from the original entries without adding new ones; hashes are left for me to fill in from `git log`.
 
-**Related commit:** `docs: update AI prompt log` (suggested message)
+**Related commit:** `docs: complete README and API documentation` (this log was committed together with Task 7)
+
+**My review notes:** _(to be completed by me)_
+
+---
+
+## Entry 21 – README and API documentation
+
+**Date:** 2026-11-07
+
+**Prompt given to AI:** "start task 7" – a professional README (20 required sections: overview, problem statement, features, stack,
+architecture, database schema, authentication and transaction workflows, idempotency, concurrency, ledger integrity, API endpoints,
+installation, environment variables, testing, deployment, demo credentials, screenshots, limitations) and API documentation (method,
+endpoint, request body, authentication, role, response, error codes); only safe dummy credentials in the public repository.
+
+**What AI generated:** a rewritten `README.md` with all 20 sections and four Mermaid diagrams; `docs/API.md` covering all 21 endpoints with
+**real responses** captured from the running API; `backend/prisma/seed-demo.js` (`npm run db:seed:demo`) with dummy `example.com` users
+and a demo history moved through the real transaction service with fixed idempotency keys; 12 screenshots in `docs/screenshots/`.
+
+**What was incorrect or incomplete:**
+1. The old README described the project as "a backend" and was missing most required sections.
+2. **The AI's first demo seed** used a ₹9,99,999 withdrawal to show "insufficient funds", but it was refused as `AMOUNT_EXCEEDS_LIMIT`
+   (over the ₹5,00,000 limit).
+3. **The AI's first screenshot script** had no way to get the receiver's account number and stopped halfway.
+4. Full-page screenshots cut the fixed sidebar off at 800 px.
+5. **The AI wrote two values in `docs/API.md` from memory** (a counterparty account number and an entry number) that did not match the
+   captured responses.
+
+**How the issue was identified:** (1) comparing the README with the 20 required sections; (2) the seed's own output; (3) reviewing the
+script before running it; (4) looking at the screenshots; (5) checking the example against the captured JSON.
+
+**How it was corrected:** (2) ₹3,000 from ₹1,700 with a new key (the second seed run replayed every earlier step – idempotency in the seed
+itself); (3) read the number from the demo database first; (4) a taller window instead of full-page capture; (5) replaced both values with
+the captured ones, and wrote the insufficient-funds message as a format instead of an uncaptured number.
+
+**How it was verified:** a **fresh install** on a new, empty database following the README steps (4 migrations, seed, demo seed,
+`verify:db` 13/13); all 4 Mermaid diagrams parsed and rendered with the real Mermaid library in Chrome; every local link and image in
+README, API.md and THREATS.md resolves; no real secret appears in any document. The temporary demo database was deleted afterwards.
+
+**Related commit:** `docs: complete README and API documentation`
 
 **My review notes:** _(to be completed by me)_
 
@@ -634,4 +674,4 @@ git log --oneline --reverse
 | 17 | `test: verify concurrent transaction safety` | |
 | 18 | `security: strengthen authentication and financial access controls` | |
 | 19 | `docs: add financial security threat model` | |
-| 20 | `docs: update AI prompt log` | |
+| 20, 21 | `docs: complete README and API documentation` | |
