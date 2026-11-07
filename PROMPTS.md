@@ -542,3 +542,47 @@ test DB 13/13 after 2,198 transactions from concurrency and tampering tests.
 **Related commit:** `test: verify financial transactions and application integration`
 
 ---
+
+# DAY 3
+
+## Entry 15 – Day 3 review + Task 1: Automated testing
+
+**Date:** 2026-11-07
+
+**Prompt given to AI:** "LedgerLine – Day 3 Final Development Master Prompt": review the whole project without blindly
+trusting earlier AI code, then Task 1 – automated tests for authentication, accounts, transactions and financial integrity
+on a dedicated test database.
+
+**What AI generated:**
+- Review: ran every suite before changing anything (Jest 161/161, frontend unit 12/12, Playwright 23/23, real DB 13/13) and
+  probed suspected weaknesses with real requests.
+- New auth tests: `/me` never returns the hash; deactivated user cannot log in (generic 401, real reason audited);
+  malformed `Authorization` headers; expired token in the cookie; token of a deleted user.
+- New account tests: `/balance` compared with PostgreSQL directly; admin/auditor may read any balance, a holder not the
+  SYSTEM account; 20 accounts → 20 different numbers.
+- `tests/invariants.js`: an **independent SQL oracle** (total of all balances = 0, no negative customer balance, every
+  transaction exactly one matching debit and credit, balance = ledger, running balances) that does not use app code.
+- `financialIntegrity.test.js` (35 tests): exact debit/credit rows for deposit, withdrawal and transfer; money conservation
+  across deposits, withdrawals and transfers; invalid amounts (zero, negative, decimal, "1e3", "abc", empty, null, missing)
+  on **all three** endpoints; business refusals and a forced withdrawal crash leave balances, transactions and ledger unchanged.
+
+**What was incorrect or incomplete (actual findings):**
+1. **Earlier tests checked the ledger with the app's own `/ledger/verify` code** – a bug in that checker would have been
+   trusted by the tests. Identified while mapping each Day 3 requirement to existing tests. Corrected with the independent
+   SQL oracle, which I then proved works: on the test DB I disabled one trigger, added ₹0.01 without a ledger entry, and the
+   oracle reported `totalOfAllBalances: "1"`, `balancesNotMatchingLedger: 1` (everything restored afterwards).
+2. **Amount validation was only tested on deposit**, not on withdraw/transfer. Identified in the same mapping; now 24 cases.
+3. **`Authorization: Bearer <token> <token>` was accepted** (extra parts ignored by `split(' ')`). Identified by a new
+   malformed-header test that failed (expected 401, got 200). Corrected: the header must match exactly `Bearer <jwt>`.
+4. Found during the review, scheduled for Task 4/8 (not fixed yet): a token still works **after logout** (verified: 200);
+   no `trust proxy` (all requests would share one IP behind a hosting proxy); cross-site cookies will break login when the
+   frontend (Vercel) and backend (Render) run on different sites.
+
+**Result:** Jest 207/207 (12 suites).
+
+**My corrections:**
+- _(fill in after reviewing)_
+
+**Related commits:** `test: add authentication and account management tests`, `test: add financial transaction integrity tests`
+
+---
