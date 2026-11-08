@@ -359,15 +359,19 @@ The test tools refuse to run against any database that is not named `ledgerline_
 
 ## 16. Deployment
 
-Target setup: **Vercel** (frontend) · **Render** (backend) · **managed PostgreSQL**. Live URLs and the verified step-by-step guide are
-added once the deployment has been tested (Day 3, Task 8).
+**Vercel** (frontend) · **Render** (backend) · **Neon** (managed PostgreSQL). Step-by-step guide: **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**.
 
-Key production settings (planned):
-- Backend: `NODE_ENV=production`, strong `JWT_SECRET`, `DATABASE_URL` of the managed database, `TRUST_PROXY` set to the number of
-  proxies, migrations with `npm run db:deploy` before start.
-- Frontend → backend on the **same site**: Vercel rewrites `/api/*` to the backend, so the `SameSite=Strict` session cookie keeps
-  working (`*.vercel.app` and `*.onrender.com` are different sites, and browsers would not send the cookie across them).
-- HTTPS everywhere (`Secure` cookies and HSTS are enabled in production).
+**Live demo:** _URL added after the deployment has been verified._
+
+- `render.yaml` – Render Blueprint (build `npm ci --include=dev`, start `npm run db:deploy && npm start`, health check `/api/health`).
+- `frontend/vercel.json` – rewrites `/api/*` to the backend so the browser only talks to one site and the `SameSite=Strict` session cookie
+  keeps working (`*.vercel.app` and `*.onrender.com` are different sites), SPA fallback, and security headers (CSP, HSTS, …).
+- `npm run db:prepare:production` – migrations, SYSTEM account, demo data and verification on the production database
+  (reads only `backend/.env.production`; never copies your private admin).
+- `npm run verify:deployment -- <url>` – 24 end-to-end checks against the live site, including idempotency and the ₹800 + ₹700 race.
+
+The whole setup was rehearsed locally first: production build with the same headers and `/api` forwarding, backend started exactly
+like Render (clean install, `NODE_ENV=production`, no `.env`, empty database) – 24/24 deployment checks passed.
 
 ## 17. Demo credentials
 

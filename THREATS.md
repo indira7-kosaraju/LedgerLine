@@ -409,3 +409,5 @@ Behind a hosting proxy, `TRUST_PROXY` makes the limit apply to the real client I
 6. 403 vs 404 reveals whether a (random UUID) account id exists (threat 4).
 7. HTTPS is required in production; local development uses plain http.
 8. No independent penetration test; LedgerLine uses simulated money only.
+9. Deployed behind Vercel + Render with `TRUST_PROXY=2`: requests sent **directly** to the `onrender.com` URL (bypassing Vercel) can fake one
+   `X-Forwarded-For` entry and so evade the per-IP rate limit. Traffic through the app's own URL is not affected.

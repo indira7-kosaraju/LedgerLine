@@ -41,6 +41,7 @@ or incomplete, how that was found, and how it was fixed.
 | 19 | 2026-11-07 | Day 3 · THREATS.md | threat model | `docs: add financial security threat model` |
 | 20 | 2026-11-07 | Day 3 · This log | documentation | `docs: complete README and API documentation` (committed together with Task 7) |
 | 21 | 2026-11-07 | Day 3 · README and API docs | documentation, **idempotency** (demo seed) | `docs: complete README and API documentation` |
+| 22 | 2026-11-08 | Day 3 · Deployment | deployment, **security** (cookies, proxies, secrets) | `chore: finalize deployment configuration` |
 
 ---
 
@@ -644,6 +645,46 @@ README, API.md and THREATS.md resolves; no real secret appears in any document. 
 
 ---
 
+## Entry 22 – Deployment configuration (Vercel, Render, Neon)
+
+**Date:** 2026-11-08
+
+**Prompt given to AI:** "start task8" – deploy the frontend to Vercel, the backend to Render and the database to a managed PostgreSQL
+service; verify login, deposit, withdrawal, transfer, history, idempotency and concurrency against the deployed environment; diagnose the
+actual error if deployment fails before claiming success.
+
+**What AI generated:** `render.yaml` (Render Blueprint), `frontend/vercel.json` (`/api/*` rewrite to Render, SPA fallback, security
+headers), a matching `vite preview` setup in `frontend/vite.config.js`, `backend/scripts/verify-deployment.js` (24 live checks),
+`backend/scripts/prepare-production-db.js` (`npm run db:prepare:production`), `docs/DEPLOYMENT.md`, and updates to README and THREATS.md.
+
+**What was incorrect or incomplete:**
+1. `prisma` is a devDependency, so the normal production install (`npm ci`) would have had no Prisma CLI for `migrate deploy`.
+2. **The AI's verification script** first required HTTPS, so it could not be used for the local rehearsal.
+3. A leftover test server from Task 4 was still holding port 4001 and made the regression run fail.
+
+Risks handled by design (not mistakes): the browser would not send the `SameSite=Strict` cookie from `vercel.app` to `onrender.com`
+(so `/api` is rewritten through Vercel); behind two proxies all users would share one rate-limit bucket (`TRUST_PROXY=2`); the private
+local admin must not reach production (`prepare-production-db.js` reads only `backend/.env.production`, clears `SEED_*`, refuses a
+localhost URL and prints only the host).
+
+**How the issue was identified:** (1) the local production rehearsal with a clean copy, no `.env` and an empty database; (2) the
+script's own first run; (3) `lsof` on the port.
+
+**How it was corrected:** (1) build command `npm ci --include=dev`; (2) an explicit localhost-rehearsal exception (anything else still
+needs HTTPS); (3) stopped the old process and re-ran the suites.
+
+**How it was verified:** local production rehearsal – clean install, `NODE_ENV=production`, fresh database, production frontend build
+behind `vite preview` with the same headers and `/api` forwarding: `verify-deployment.js` **24/24**; Chrome showed no CSP violations or
+JavaScript errors and all six security headers; both safety refusals of `prepare-production-db.js` tested. Regression after the
+rehearsal: Jest 261/261, Playwright 23/23, lint clean. **The live deployment is not verified yet** – it needs the Vercel and Render
+accounts, which only I can create.
+
+**Related commit:** `chore: finalize deployment configuration`
+
+**My review notes:** _(to be completed by me)_
+
+---
+
 ## Commit references
 
 The AI cannot know commit hashes and did not run Git. Fill in the hash column with:
@@ -675,3 +716,4 @@ git log --oneline --reverse
 | 18 | `security: strengthen authentication and financial access controls` | |
 | 19 | `docs: add financial security threat model` | |
 | 20, 21 | `docs: complete README and API documentation` | |
+| 22 | `chore: finalize deployment configuration` | |
