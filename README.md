@@ -1,4 +1,4 @@
-# LedgerLine – Money Movement with a Ledger You Can Prove
+# LedgerLine X – Money Movement with a Ledger You Can Prove
 
 A full-stack banking simulation where every rupee is traceable: deposits, withdrawals and transfers are written to a
 **double-entry ledger** that PostgreSQL itself keeps balanced, duplicates are impossible thanks to **idempotency keys**,
