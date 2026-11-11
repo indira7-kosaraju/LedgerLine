@@ -417,6 +417,8 @@ multi-currency with exchange rates · CI pipeline running all test suites on eve
 
 | Document | Contents |
 |---|---|
+| [docs/PROJECT_SUMMARY.md](docs/PROJECT_SUMMARY.md) | Short project write-up: problem, what was built, AI use, AI mistakes, what is not finished |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Step-by-step deployment to Vercel, Render and Neon |
 | [docs/API.md](docs/API.md) | API reference: every endpoint, request, real response, error codes |
 | [THREATS.md](THREATS.md) | Threat model: 13 financial threats, protections, proving tests, accepted risks |
 | [docs/SECURITY_AUDIT.md](docs/SECURITY_AUDIT.md) | Day 3 security audit with the actual result of each attack |
