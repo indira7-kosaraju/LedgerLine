@@ -32,16 +32,18 @@ LedgerLine is a learning project that implements these guarantees end to end and
 - **Authentication and roles:** bcrypt passwords, JWTs in an HttpOnly `SameSite=Strict` cookie, CSRF header check, and session
   revocation on logout and when an account is deactivated. Roles are ACCOUNT_HOLDER, ADMIN and AUDITOR. A user can only use their own
   accounts, an admin cannot move money, and an auditor is read-only.
+- **First-admin bootstrap:** `npm run admin:bootstrap` creates the first admin only if no active admin exists (hidden password
+  prompt, database lock, audited), and can switch off the public demo admin. Every user can change their own password.
 - **Audit log** for logins, account changes, money movements and refusals.
 - **Rate limiting** for login, registration and the whole API, plus `TRUST_PROXY` support so limits use the real client IP behind
   hosting proxies.
 - **Tests:**
-  - 261 backend tests (Jest + Supertest) on a separate test database
-  - 23 browser tests (Playwright)
-  - 12 frontend unit tests
+  - 281 backend tests (Jest + Supertest) on a separate test database
+  - 24 browser tests (Playwright)
+  - 13 frontend unit tests
   - a 56-check smoke test
   - a 13-check database verifier
-  - a 24-check deployment verifier
+  - a 25-check deployment verifier
 - **Documentation:** [README](../README.md), [API reference](API.md), [threat model](../THREATS.md), [security audit](SECURITY_AUDIT.md),
   [deployment guide](DEPLOYMENT.md), and an [AI prompt log](../PROMPTS.md) with 22 entries.
 - **Deployment setup:** frontend on Vercel (`/api/*` rewritten to the backend so the session cookie stays on the same site), backend on
@@ -126,7 +128,7 @@ The lesson: AI output has to be proven by tests and by the real running system, 
 - A demo login against the backend returns 200.
 
 **Not verified yet:**
-- **The live frontend.** The Vercel URL has not been confirmed, and the 24-check `verify-deployment.js` has not been run against the
+- **The live frontend.** The Vercel URL has not been confirmed, and the 25-check `verify-deployment.js` has not been run against the
   live HTTPS site.
 - **Browser testing of the deployed app:**
   - login

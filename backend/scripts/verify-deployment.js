@@ -3,7 +3,7 @@
 //
 //   node scripts/verify-deployment.js https://your-app.vercel.app
 //
-// Uses only the public demo accounts (DemoPass123) plus a fresh test user it registers
+// Uses only the public demo holders/auditor (DemoPass123) plus a fresh test user it registers
 // itself. Moves simulated money only. Read-only for everything else.
 const crypto = require('crypto');
 
@@ -59,14 +59,15 @@ async function main() {
   console.log('\nDemo credentials and roles');
   const asha = await login('asha.holder@example.com');
   const ravi = await login('ravi.holder@example.com');
-  const admin = await login('demo.admin@example.com');
   const auditor = await login('demo.auditor@example.com');
-  check('all four demo accounts can log in', Boolean(asha && ravi && admin && auditor));
+  check('demo holders and demo auditor can log in', Boolean(asha && ravi && auditor));
+  // Its password is published in README.md – on a public site it must be deactivated (npm run admin:bootstrap -- --replace-demo-admin).
+  check('public demo admin cannot log in (401)', (await call('POST', '/auth/login', { body: { email: 'demo.admin@example.com', password: 'DemoPass123' } })).status === 401);
   const cookieLogin = await fetch(`${API}/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'asha.holder@example.com', password: 'DemoPass123' }) });
   const setCookie = cookieLogin.headers.get('set-cookie') || '';
   check('browser login sets an HttpOnly, Secure, SameSite=Strict cookie', /HttpOnly/i.test(setCookie) && /Secure/i.test(setCookie) && /SameSite=Strict/i.test(setCookie));
   check('holder cannot read the ledger (403)', (await call('GET', '/ledger/entries', { token: asha })).status === 403);
-  check('admin cannot move money (403)', (await call('POST', '/transactions/deposit', { token: admin, key: crypto.randomUUID(), body: { accountId: crypto.randomUUID(), amountPaise: 100 } })).status === 403);
+  check('auditor cannot move money (403)', (await call('POST', '/transactions/deposit', { token: auditor, key: crypto.randomUUID(), body: { accountId: crypto.randomUUID(), amountPaise: 100 } })).status === 403);
 
   console.log('\nMoney movement (fresh test user)');
   const email = `deploy-check-${crypto.randomUUID().slice(0, 8)}@example.com`;

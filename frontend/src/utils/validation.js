@@ -41,6 +41,22 @@ export function validateRegister({ fullName, email, password, confirmPassword })
   return errors
 }
 
+export function validateChangePassword({ currentPassword, newPassword, confirmPassword }) {
+  const errors = {}
+  if (!currentPassword) errors.currentPassword = 'Current password is required'
+
+  const failed = PASSWORD_RULES.filter((rule) => !rule.test(newPassword))
+  if (!newPassword) errors.newPassword = 'New password is required'
+  else if (failed.length) errors.newPassword = `Password needs: ${failed.map((r) => r.label.toLowerCase()).join(', ')}`
+  else if (byteLength(newPassword) > 72) errors.newPassword = 'Password is too long (maximum 72 bytes)'
+  else if (newPassword === currentPassword) errors.newPassword = 'New password must be different from the current password'
+
+  if (!confirmPassword) errors.confirmPassword = 'Please confirm your new password'
+  else if (confirmPassword !== newPassword) errors.confirmPassword = 'Passwords do not match'
+
+  return errors
+}
+
 // Turns the backend's { details: [{ field, message }] } into { field: message }.
 export function fieldErrorsFromApi(error) {
   const result = {}

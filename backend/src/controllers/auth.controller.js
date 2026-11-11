@@ -32,6 +32,10 @@ async function me(req, res) {
   res.status(200).json({ user });
 }
 
+async function changePassword(req, res) {
+  sendSession(req, res, 200, await authService.changePassword(req.user.id, req.body, requestContext(req)));
+}
+
 // Always succeeds, even with an expired token, so the user can always sign out.
 // A valid token is REVOKED on the server (sessionVersion + 1), so a copy of it – stolen,
 // or left in another browser – stops working too. This signs the user out everywhere.
@@ -51,4 +55,4 @@ async function logout(req, res) {
   res.status(204).end();
 }
 
-module.exports = { register, login, me, logout };
+module.exports = { register, login, me, changePassword, logout };

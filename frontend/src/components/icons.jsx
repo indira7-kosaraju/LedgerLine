@@ -78,6 +78,12 @@ export const UsersIcon = (p) => (
     <path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6 6 0 0 1 3.5 6" />
   </Icon>
 )
+export const UserIcon = (p) => (
+  <Icon {...p}>
+    <circle cx="12" cy="8" r="4" />
+    <path d="M4 21a8 8 0 0 1 16 0" />
+  </Icon>
+)
 export const PlusIcon = (p) => (
   <Icon {...p}>
     <path d="M12 5v14M5 12h14" />

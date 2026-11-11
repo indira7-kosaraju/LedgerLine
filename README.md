@@ -62,7 +62,7 @@ can be re-derived from the ledger at any time ("a ledger you can prove").
 - Double-entry ledger with database-enforced integrity; idempotent money movement; row-level locking.
 - Role-based access control checked on the server for every request; full audit trail including refusals.
 - Helmet, strict CORS, CSRF protection, rate limiting, input validation, safe error responses.
-- 261 backend tests, 23 browser tests, 12 frontend unit tests.
+- 281 backend tests, 24 browser tests, 13 frontend unit tests.
 
 ## 4. Technology stack
 
@@ -287,10 +287,11 @@ createdb -O ledgerline_app ledgerline
 
 # 2. Backend
 cd backend
-cp .env.example .env            # set DATABASE_URL, JWT_SECRET, SEED_* (see below)
+cp .env.example .env            # set DATABASE_URL and JWT_SECRET (see below)
 npm install                     # also runs `prisma generate`
 npm run db:deploy               # apply all migrations
-npm run db:seed                 # SYSTEM account + admin/auditor from .env
+npm run db:seed                 # SYSTEM account (+ optional dev admin/auditor from SEED_*)
+npm run admin:bootstrap -- --email you@example.org --name "Your Name"   # first admin
 npm run db:seed:demo            # optional: demo users and transactions
 npm run dev                     # http://localhost:4000
 
@@ -340,9 +341,9 @@ invalid values.
 
 | Command (folder) | What it covers | Result |
 |---|---|---|
-| `npm test` (backend) | Jest + Supertest: auth, authorization, accounts, transactions, **financial integrity**, **idempotency**, **concurrency**, ledger tampering, security audit, rate limits | 261 tests |
-| `npm test` (frontend) | amount parsing (no floating point), validation, error messages, idempotency keys | 12 tests |
-| `npm run test:e2e` (frontend) | Playwright in Chrome: registration, login, protected routes, roles, money forms, history, error handling, lost-response retry | 23 tests |
+| `npm test` (backend) | Jest + Supertest: auth, authorization, accounts, transactions, **financial integrity**, **idempotency**, **concurrency**, ledger tampering, security audit, rate limits, **first-admin bootstrap**, change password | 281 tests |
+| `npm test` (frontend) | amount parsing (no floating point), validation, error messages, idempotency keys | 13 tests |
+| `npm run test:e2e` (frontend) | Playwright in Chrome: registration, login, protected routes, roles, money forms, history, error handling, lost-response retry, change password | 24 tests |
 | `npm run smoke` (backend) | end-to-end API check against your running dev server | 56 checks |
 | `npm run verify:db` (backend) | read-only check of the real database | 13 checks |
 
@@ -368,10 +369,10 @@ The test tools refuse to run against any database that is not named `ledgerline_
   keeps working (`*.vercel.app` and `*.onrender.com` are different sites), SPA fallback, and security headers (CSP, HSTS, …).
 - `npm run db:prepare:production` – migrations, SYSTEM account, demo data and verification on the production database
   (reads only `backend/.env.production`; never copies your private admin).
-- `npm run verify:deployment -- <url>` – 24 end-to-end checks against the live site, including idempotency and the ₹800 + ₹700 race.
+- `npm run verify:deployment -- <url>` – 25 end-to-end checks against the live site, including idempotency, the ₹800 + ₹700 race and that the public demo admin is disabled.
 
 The whole setup was rehearsed locally first: production build with the same headers and `/api` forwarding, backend started exactly
-like Render (clean install, `NODE_ENV=production`, no `.env`, empty database) – 24/24 deployment checks passed.
+like Render (clean install, `NODE_ENV=production`, no `.env`, empty database) – all 24 deployment checks of that version passed (2026-11-08).
 
 ## 17. Demo credentials
 
@@ -381,12 +382,29 @@ Safe **dummy** accounts created by `npm run db:seed:demo` (reserved `example.com
 |---|---|---|
 | Account holder | `asha.holder@example.com` | `DemoPass123` |
 | Account holder | `ravi.holder@example.com` | `DemoPass123` |
-| Administrator | `demo.admin@example.com` | `DemoPass123` |
+| Administrator (**local only**) | `demo.admin@example.com` | `DemoPass123` |
 | Auditor | `demo.auditor@example.com` | `DemoPass123` |
 
 The demo seed creates 3 accounts and 6 transactions plus one refused withdrawal, all through the real transaction service, with
-fixed idempotency keys – running it again replays instead of duplicating. **Never use these credentials for real data.** The
-private admin/auditor created by `npm run db:seed` use the credentials from your own `.env`.
+fixed idempotency keys – running it again replays instead of duplicating. **Never use these credentials for real data.**
+
+**The demo admin exists only locally.** Its password is public, so it is never created on the deployed site
+(`db:prepare:production` sets `SEED_DEMO_ADMIN=false`), and an existing one is deactivated by the bootstrap below.
+
+### First administrator (bootstrap)
+
+Public registration only creates account holders. The first admin is created once with:
+
+```bash
+cd backend
+npm run admin:bootstrap -- --email you@example.org --name "Your Name"
+# deployed database (backend/.env.production), also deactivating the public demo admin:
+npm run admin:bootstrap -- --production --email you@example.org --name "Your Name" --replace-demo-admin
+```
+
+The password is typed twice at a hidden prompt and never printed or stored. The command refuses if an active admin already exists or
+the email belongs to an existing user, uses a database lock so two runs can't both succeed, and writes an `ADMIN_BOOTSTRAP` audit
+entry. Every user can change their password on the **Profile** page (other sessions are signed out).
 
 ## 18. Screenshots
 

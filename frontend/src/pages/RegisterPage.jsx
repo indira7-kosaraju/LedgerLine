@@ -2,31 +2,13 @@ import { useState } from 'react'
 import { Link, useLocation } from 'react-router'
 import { useAuth } from '../hooks/useAuth'
 import { useToast } from '../hooks/useToast'
-import { PASSWORD_RULES, fieldErrorsFromApi, validateRegister } from '../utils/validation'
-import { cn } from '../utils/cn'
+import { fieldErrorsFromApi, validateRegister } from '../utils/validation'
 import AuthCard from '../components/layout/AuthCard'
 import Input from '../components/ui/Input'
 import PasswordInput from '../components/ui/PasswordInput'
 import Button from '../components/ui/Button'
 import Alert from '../components/ui/Alert'
-
-// Live checklist under the password field.
-function PasswordChecklist({ password }) {
-  return (
-    <ul className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs" aria-label="Password requirements">
-      {PASSWORD_RULES.map((rule) => {
-        const ok = rule.test(password)
-        return (
-          <li key={rule.id} className={cn('flex items-center gap-1.5', ok ? 'text-emerald-700' : 'text-slate-500')}>
-            <span aria-hidden="true">{ok ? '✓' : '○'}</span>
-            {rule.label}
-            <span className="sr-only">{ok ? '(met)' : '(not met)'}</span>
-          </li>
-        )
-      })}
-    </ul>
-  )
-}
+import PasswordChecklist from '../components/ui/PasswordChecklist'
 
 export default function RegisterPage() {
   const { register } = useAuth()

@@ -17,6 +17,7 @@ import TransactionDetailsPage from './pages/TransactionDetailsPage'
 import MoneyMovementPage from './pages/MoneyMovementPage'
 import AdminUsersPage from './pages/AdminUsersPage'
 import LedgerPage from './pages/LedgerPage'
+import ProfilePage from './pages/ProfilePage'
 import ForbiddenPage from './pages/ForbiddenPage'
 import NotFoundPage from './pages/NotFoundPage'
 
@@ -35,6 +36,7 @@ export default function App() {
                 <Route path="accounts/:id" element={<AccountDetailsPage />} />
                 <Route path="transactions" element={<TransactionsPage />} />
                 <Route path="transactions/:id" element={<TransactionDetailsPage />} />
+                <Route path="profile" element={<ProfilePage />} />
 
                 {/* Money movement: account holders only (UI guard – the backend enforces it too) */}
                 <Route element={<ProtectedRoute roles={['ACCOUNT_HOLDER']} />}>

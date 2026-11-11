@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { PASSWORD_RULES, fieldErrorsFromApi, validateLogin, validateRegister } from '../../src/utils/validation.js'
+import { PASSWORD_RULES, fieldErrorsFromApi, validateChangePassword, validateLogin, validateRegister } from '../../src/utils/validation.js'
 
 const valid = { fullName: 'Asha Rao', email: 'asha@example.com', password: 'Secret123', confirmPassword: 'Secret123' }
 
@@ -31,4 +31,16 @@ test('backend field errors map to form fields (first message wins)', () => {
   const error = { details: [{ field: 'email', message: 'taken' }, { field: 'email', message: 'second' }, { field: 'password', message: 'weak' }] }
   assert.deepEqual(fieldErrorsFromApi(error), { email: 'taken', password: 'weak' })
   assert.deepEqual(fieldErrorsFromApi(undefined), {})
+})
+
+test('change password: same rules as registration, and the new password must differ', () => {
+  const ok = { currentPassword: 'Secret123', newPassword: 'Changed456', confirmPassword: 'Changed456' }
+  assert.deepEqual(validateChangePassword(ok), {})
+  assert.ok(validateChangePassword({ ...ok, currentPassword: '' }).currentPassword)
+  assert.ok(validateChangePassword({ ...ok, newPassword: 'weak', confirmPassword: 'weak' }).newPassword)
+  assert.equal(
+    validateChangePassword({ ...ok, newPassword: 'Secret123', confirmPassword: 'Secret123' }).newPassword,
+    'New password must be different from the current password',
+  )
+  assert.equal(validateChangePassword({ ...ok, confirmPassword: 'Other1234' }).confirmPassword, 'Passwords do not match')
 })

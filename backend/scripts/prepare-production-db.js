@@ -6,7 +6,8 @@
 //
 // Safety:
 // - Only backend/.env.production is used for DATABASE_URL – never your local .env database.
-// - The private admin/auditor from your local .env are NOT copied to production:
+// - The private admin/auditor from your local .env are NOT copied to production, and the
+//   public demo admin is never created there:
 //   SEED_* is empty unless you set it in .env.production yourself.
 // - The connection string is never printed (only the host name).
 // - `prisma migrate deploy` only applies committed migrations; it never resets data.
@@ -45,6 +46,9 @@ const env = {
   SEED_AUDITOR_EMAIL: '',
   SEED_AUDITOR_PASSWORD: '',
   ...prod, // anything set in .env.production wins (including SEED_* if you want a private admin)
+  // Never create the demo admin (published password) on a public deployment – not overridable.
+  // The real first admin is created with: npm run admin:bootstrap -- --production …
+  SEED_DEMO_ADMIN: 'false',
 };
 
 const run = (label, command) => {

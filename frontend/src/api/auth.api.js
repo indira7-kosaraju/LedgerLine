@@ -13,6 +13,13 @@ export async function register({ email, password, fullName }) {
   return data.user
 }
 
+// Needs the current password. The backend ends every other session and replaces this
+// browser's session cookie, so we stay signed in here.
+export async function changePassword({ currentPassword, newPassword }) {
+  const { data } = await api.post('/auth/change-password', { currentPassword, newPassword })
+  return data.user
+}
+
 export async function logout() {
   await api.post('/auth/logout', undefined, { skipAuthRedirect: true })
 }

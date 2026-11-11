@@ -203,3 +203,56 @@ describe('CSRF protection for cookie sessions', () => {
     expect((await request(app).get('/api/accounts').set('Cookie', cookie)).status).toBe(200);
   });
 });
+
+describe('Change password', () => {
+  const NEW_PASSWORD = 'Changed456';
+  const change = (auth, body) => request(app).post('/api/auth/change-password').set(auth).set('X-Auth-Mode', 'bearer').send(body);
+  let holder;
+  beforeEach(async () => {
+    holder = await createUser(); // password: Secret123
+  });
+
+  test('without a session → 401', async () => {
+    const res = await request(app).post('/api/auth/change-password').send({ currentPassword: PASSWORD, newPassword: NEW_PASSWORD });
+    expect(res.status).toBe(401);
+  });
+
+  test('wrong current password → 400 on the currentPassword field, password unchanged, audited', async () => {
+    const res = await change(holder.auth, { currentPassword: 'WrongPass1', newPassword: NEW_PASSWORD });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('INVALID_CURRENT_PASSWORD');
+    expect(res.body.error.details).toEqual([{ field: 'currentPassword', message: 'Current password is incorrect' }]);
+    expect((await login(holder.user.email, PASSWORD)).status).toBe(200);
+    expect(await prisma.auditLog.count({ where: { action: 'AUTH_CHANGE_PASSWORD', outcome: 'REFUSED', actorId: holder.user.id } })).toBe(1);
+  });
+
+  test.each([
+    ['weak new password', { currentPassword: PASSWORD, newPassword: 'weak' }, 'newPassword'],
+    ['new = current', { currentPassword: PASSWORD, newPassword: PASSWORD }, 'newPassword'],
+    ['unknown field', { currentPassword: PASSWORD, newPassword: NEW_PASSWORD, role: 'ADMIN' }, null],
+  ])('%s → 400 VALIDATION_ERROR', async (_, body, field) => {
+    const res = await change(holder.auth, body);
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_ERROR');
+    if (field) expect(res.body.error.details.some((d) => d.field === field)).toBe(true);
+  });
+
+  test('success: new password works, old password and every OLD token stop working, this session gets a new token', async () => {
+    const res = await change(holder.auth, { currentPassword: PASSWORD, newPassword: NEW_PASSWORD });
+    expect(res.status).toBe(200);
+    expect(res.body.user).toMatchObject({ id: holder.user.id, role: 'ACCOUNT_HOLDER' });
+    expect(JSON.stringify(res.body.user)).not.toMatch(/passwordHash|sessionVersion/);
+    expect(sessionCookie(res)).toMatch(/HttpOnly/i); // the browser's cookie is replaced, so it stays signed in
+
+    // A copy of the old token (e.g. another device) is revoked.
+    const old = await request(app).get('/api/auth/me').set(holder.auth);
+    expect(old.status).toBe(401);
+    expect(old.body.error.code).toBe('SESSION_REVOKED');
+    // The new token works.
+    expect((await request(app).get('/api/auth/me').set('Authorization', `Bearer ${res.body.token}`)).status).toBe(200);
+
+    expect((await login(holder.user.email, PASSWORD)).status).toBe(401);
+    expect((await login(holder.user.email, NEW_PASSWORD)).status).toBe(200);
+    expect(await prisma.auditLog.count({ where: { action: 'AUTH_CHANGE_PASSWORD', outcome: 'SUCCESS', actorId: holder.user.id } })).toBe(1);
+  });
+});

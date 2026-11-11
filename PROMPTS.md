@@ -42,6 +42,7 @@ or incomplete, how that was found, and how it was fixed.
 | 20 | 2026-11-07 | Day 3 · This log | documentation | `docs: complete README and API documentation` (committed together with Task 7) |
 | 21 | 2026-11-07 | Day 3 · README and API docs | documentation, **idempotency** (demo seed) | `docs: complete README and API documentation` |
 | 22 | 2026-11-08 | Day 3 · Deployment | deployment, **security** (cookies, proxies, secrets) | `chore: finalize deployment configuration` |
+| 23 | 2026-11-11 | Update · Step 1 | **security**, authentication, admin bootstrap | `feat: add secure first-admin bootstrap and password change` |
 
 ---
 
@@ -685,6 +686,49 @@ accounts, which only I can create.
 
 ---
 
+## Entry 23 – First-admin bootstrap and password change (updated problem statement, step 1)
+
+**Date:** 2026-11-11
+
+**Prompt given to AI:** the updated problem statement (secure account management, onboarding, role-based access, auditable
+operations), step 1: "First-admin bootstrap and secure authentication. First inspect the existing implementation and give me a clear
+gap analysis. Wait for my approval before modifying files."
+
+**What AI generated:** `backend/src/services/adminBootstrap.service.js` and `backend/scripts/bootstrap-admin.js`
+(`npm run admin:bootstrap`); `POST /api/auth/change-password`; a Profile page with a change-password form; `SEED_DEMO_ADMIN` so the
+demo admin is never created on production; empty `SEED_*` values in `.env.example`; an audit entry for seeded users; updated
+`verify-deployment.js`; `tests/integration/bootstrap.test.js` (14 tests), 6 change-password tests, 1 Playwright and 1 unit test.
+
+**What was incorrect or incomplete:**
+1. **Found in the gap analysis (earlier AI code):** the deployed site contained `demo.admin@example.com`, whose password
+   `DemoPass123` is published in the README – anyone could sign in as admin.
+2. `seed.js` created an admin whenever the configured email was new, so it could silently add a second admin; admin creation was not
+   audited; `.env.example` contained an admin password that passes the password rules.
+3. Nobody could change their own password.
+4. **The AI's first concurrency test was too weak:** "5 runs at the same moment → 1 admin" still passed with the database lock
+   removed, because the runs happened not to overlap in time.
+5. **The AI's first Playwright test** used a selector that matched the email twice (sidebar and profile card).
+
+**How the issue was identified:** (1)–(3) reading `seed.js`, `seed-demo.js`, `auth.routes.js` and logging in to the live backend as
+the demo holder; (4) mutation testing – removing the lock left all tests green; (5) the Playwright run (strict-mode violation).
+
+**How it was corrected:** (1)–(2) a bootstrap command that refuses when an active admin exists or the email is taken, takes the password
+at a hidden prompt, uses a transaction advisory lock, writes `ADMIN_BOOTSTRAP` in the same transaction, and with
+`--replace-demo-admin` deactivates the demo admin in that same transaction; (3) change password with the current password, revoking
+all other sessions; (4) a new test where another transaction holds the lock and the bootstrap must wait; (5) the selector is limited to
+the main area.
+
+**How it was verified:** backend 281/281 (14 suites), frontend unit 13/13, Playwright 24/24, frontend lint clean, production build OK.
+Mutation tests: lock removed → 1 failure (the new wait test); active-admin check removed → 5 failures; no session revocation on
+password change → 1 failure. The hidden prompt was checked in a real terminal (`expect`): the typed password appears 0 times in the
+output. **Not yet done:** running the bootstrap against the production database (needs my approval and my password).
+
+**Related commit:** `feat: add secure first-admin bootstrap and password change`
+
+**My review notes:** _(to be completed by me)_
+
+---
+
 ## Commit references
 
 The AI cannot know commit hashes and did not run Git. Fill in the hash column with:
@@ -717,3 +761,4 @@ git log --oneline --reverse
 | 19 | `docs: add financial security threat model` | |
 | 20, 21 | `docs: complete README and API documentation` | |
 | 22 | `chore: finalize deployment configuration` | |
+| 23 | `feat: add secure first-admin bootstrap and password change` | |

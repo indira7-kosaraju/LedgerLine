@@ -17,7 +17,7 @@ HttpOnly session cookie, CSRF protection and CORS all work unchanged.
 | `render.yaml` | Render Blueprint: build `npm ci --include=dev`, start `npm run db:deploy && npm start`, health check, env vars |
 | `frontend/vercel.json` | `/api/*` rewrite to Render, SPA fallback, security headers (CSP, HSTS, X-Frame-Options, …) |
 | `backend/scripts/prepare-production-db.js` | `npm run db:prepare:production` – migrations, seeds, verification on the production DB |
-| `backend/scripts/verify-deployment.js` | `npm run verify:deployment -- <url>` – 24 end-to-end checks against the live site |
+| `backend/scripts/verify-deployment.js` | `npm run verify:deployment -- <url>` – 25 end-to-end checks against the live site |
 
 ---
 
@@ -40,7 +40,13 @@ HttpOnly session cookie, CSRF protection and CORS all work unchanged.
    npm run db:prepare:production
    ```
    Expected: 4 migrations applied, `SYSTEM account ready`, `Skipping ADMIN/AUDITOR` (private accounts are not copied to production),
-   7 demo steps, and `✅ Database state verified: 13 checks passed`.
+   7 demo steps (no demo admin), and `✅ Database state verified: 13 checks passed`.
+
+7. Create your **real first admin** (and switch off the public demo admin if an older deployment created one):
+   ```bash
+   npm run admin:bootstrap -- --production --email you@example.org --name "Your Name" --replace-demo-admin
+   ```
+   Type the password at the hidden prompt (twice). Expected: `✅ First admin created: …`.
 
 ## Step 2 – Backend (Render)
 
@@ -85,9 +91,9 @@ cd ~/Documents/snovasys/LedgerLine/backend
 npm run verify:deployment -- https://<your-app>.vercel.app
 ```
 
-Expected: `✅ Deployment verified: 24 checks passed` – site and security headers, SPA deep links, health through the rewrite, all four
-demo logins, a Secure HttpOnly cookie, role checks, deposit / withdrawal / transfer / history, idempotency (replay, 5 simultaneous
-duplicates, reused key → 422), the ₹800 + ₹700 race on ₹1,000, and a balanced ledger.
+Expected: `✅ Deployment verified: 25 checks passed` – site and security headers, SPA deep links, health through the rewrite, the demo
+holder and auditor logins, a Secure HttpOnly cookie, role checks, deposit / withdrawal / transfer / history, idempotency (replay, 5 simultaneous
+duplicates, reused key → 422), the ₹800 + ₹700 race on ₹1,000, a balanced ledger, and that the public demo admin **cannot** log in.
 
 Then try it in a browser with the demo credentials (README → Demo credentials).
 

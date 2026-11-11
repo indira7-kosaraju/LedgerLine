@@ -26,4 +26,15 @@ const loginSchema = z.strictObject({
   password: z.string().min(1, 'Password is required').max(200),
 });
 
-module.exports = { registerSchema, loginSchema };
+// The current password is only compared, so – like login – no strength rules apply to it.
+const changePasswordSchema = z
+  .strictObject({
+    currentPassword: z.string().min(1, 'Current password is required').max(200),
+    newPassword: password,
+  })
+  .refine((d) => d.currentPassword !== d.newPassword, {
+    message: 'New password must be different from the current password',
+    path: ['newPassword'],
+  });
+
+module.exports = { registerSchema, loginSchema, changePasswordSchema };

@@ -4,7 +4,7 @@ const env = require('../config/env');
 
 const validate = require('../middleware/validate');
 const authenticate = require('../middleware/authenticate');
-const { registerSchema, loginSchema } = require('../utils/schemas/auth.schemas');
+const { registerSchema, loginSchema, changePasswordSchema } = require('../utils/schemas/auth.schemas');
 const authController = require('../controllers/auth.controller');
 
 const router = Router();
@@ -33,6 +33,8 @@ const registerLimiter = rateLimit({
 router.post('/register', registerLimiter, validate(registerSchema), authController.register);
 router.post('/login', loginLimiter, validate(loginSchema), authController.login);
 router.get('/me', authenticate, authController.me);
+// Wrong current passwords count toward the same failed-login limit (password guessing).
+router.post('/change-password', loginLimiter, authenticate, validate(changePasswordSchema), authController.changePassword);
 router.post('/logout', authController.logout);
 
 module.exports = router;

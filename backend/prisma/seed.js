@@ -34,7 +34,8 @@ async function seedSystemAccount() {
 // so they are created here from credentials in .env.
 async function seedPrivilegedUser(role, email, password, fullName) {
   if (!email || !password) {
-    console.log(`Skipping ${role}: set SEED_${role}_EMAIL and SEED_${role}_PASSWORD in .env`);
+    const hint = role === 'ADMIN' ? ' – create the first admin with: npm run admin:bootstrap' : '';
+    console.log(`Skipping ${role}: SEED_${role}_EMAIL/PASSWORD not set${hint}`);
     return;
   }
   if (!PASSWORD_RULE.test(password)) {
@@ -55,7 +56,11 @@ async function seedPrivilegedUser(role, email, password, fullName) {
 
   const rounds = Number(process.env.BCRYPT_SALT_ROUNDS) || 12;
   const passwordHash = await bcrypt.hash(password, rounds);
-  await prisma.user.create({ data: { email: normalizedEmail, passwordHash, fullName, role } });
+  const user = await prisma.user.create({ data: { email: normalizedEmail, passwordHash, fullName, role } });
+  // A privileged user never appears without a trace in the audit log.
+  await prisma.auditLog.create({
+    data: { action: 'USER_SEED', outcome: 'SUCCESS', entityType: 'User', entityId: user.id, metadata: { email: normalizedEmail, role }, userAgent: 'prisma/seed.js' },
+  });
   console.log(`${role} created: ${normalizedEmail}`);
 }
 

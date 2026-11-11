@@ -84,4 +84,31 @@ async function getProfile(userId) {
   return user;
 }
 
-module.exports = { register, login, getProfile, publicUserFields };
+// Changes the user's own password. Needs the current password, so a stolen session alone
+// can't take over the account. Raising sessionVersion ends every OTHER session (other
+// browsers, copied tokens); this browser gets a fresh token and stays signed in.
+async function changePassword(userId, { currentPassword, newPassword }, ctx) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) throw new AppError(404, 'User not found', 'NOT_FOUND');
+
+  if (!(await bcrypt.compare(currentPassword, user.passwordHash))) {
+    await audit.recordSafe({ actorId: user.id, action: 'AUTH_CHANGE_PASSWORD', outcome: 'REFUSED', reason: 'WRONG_PASSWORD', entityType: 'User', entityId: user.id, ...ctx });
+    // 400, not 401: the session itself is still valid.
+    throw new AppError(400, 'Current password is incorrect', 'INVALID_CURRENT_PASSWORD', [
+      { field: 'currentPassword', message: 'Current password is incorrect' },
+    ]);
+  }
+
+  const passwordHash = await bcrypt.hash(newPassword, env.BCRYPT_SALT_ROUNDS);
+  const updated = await prisma.user.update({
+    where: { id: user.id },
+    data: { passwordHash, sessionVersion: { increment: 1 } },
+    select: { ...publicUserFields, sessionVersion: true },
+  });
+
+  await audit.recordSafe({ actorId: user.id, action: 'AUTH_CHANGE_PASSWORD', outcome: 'SUCCESS', entityType: 'User', entityId: user.id, ...ctx });
+
+  return { user: toPublicUser(updated), token: signAccessToken(updated) };
+}
+
+module.exports = { register, login, getProfile, changePassword, publicUserFields };

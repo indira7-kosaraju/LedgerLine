@@ -24,6 +24,11 @@ const DEMO_USERS = [
   { key: 'auditor', email: 'demo.auditor@example.com', fullName: 'Demo Auditor', role: 'AUDITOR', accounts: 0 },
 ];
 
+// The demo ADMIN has a published password, so it must never exist on a public deployment.
+// prepare-production-db.js sets SEED_DEMO_ADMIN=false; locally it defaults to true.
+const includeDemoAdmin = process.env.SEED_DEMO_ADMIN !== 'false';
+const seededUsers = DEMO_USERS.filter((u) => u.role !== 'ADMIN' || includeDemoAdmin);
+
 async function ensureUser({ email, fullName, role }) {
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) return existing;
@@ -58,7 +63,7 @@ async function move(user, path, key, body) {
 
 async function main() {
   const users = {};
-  for (const u of DEMO_USERS) users[u.key] = await ensureUser(u);
+  for (const u of seededUsers) users[u.key] = await ensureUser(u);
   const [ashaMain, ashaSavings] = await ensureAccounts(users.asha, 2);
   const [raviMain] = await ensureAccounts(users.ravi, 1);
 
@@ -80,7 +85,8 @@ async function main() {
   }
 
   console.log(`\nDemo users (password for all: ${DEMO_PASSWORD}):`);
-  for (const u of DEMO_USERS) console.log(`  ${u.role.padEnd(14)} ${u.email}`);
+  for (const u of seededUsers) console.log(`  ${u.role.padEnd(14)} ${u.email}`);
+  if (!includeDemoAdmin) console.log('  (no demo admin – create the real one with: npm run admin:bootstrap)');
 }
 
 main()

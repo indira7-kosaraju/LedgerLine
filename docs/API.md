@@ -80,6 +80,7 @@ List endpoints accept `page` (default 1) and `limit` (default 20, max 100) and r
 | POST | [/auth/register](#post-authregister) | – | – |
 | POST | [/auth/login](#post-authlogin) | – | – |
 | GET | [/auth/me](#get-authme) | ✅ | any |
+| POST | [/auth/change-password](#post-authchange-password) | ✅ | any |
 | POST | [/auth/logout](#post-authlogout) | optional | any |
 | POST | [/accounts](#post-accounts) | ✅ | ACCOUNT_HOLDER |
 | GET | [/accounts](#get-accounts) | ✅ | any (holders: own) |
@@ -160,6 +161,27 @@ The signed-in user. **Response 200**
 ```json
 { "error": { "code": "SESSION_REVOKED", "message": "Your session has ended. Please sign in again." } }
 ```
+
+### POST /auth/change-password
+
+Changes your own password. Needs the current password. **Every other session of this user is revoked** (other browsers, copied
+tokens → `401 SESSION_REVOKED`); this browser receives a new session cookie and stays signed in. Audited as `AUTH_CHANGE_PASSWORD`.
+
+**Request** `{ "currentPassword": "Secret123", "newPassword": "Changed456" }` – `newPassword` follows the registration rules.
+
+**Response 200** – `user` (same shape as `/auth/me`), plus `token` with `X-Auth-Mode: bearer`; sets the new session cookie.
+```json
+{ "user": { "id": "ebabb839-…", "email": "capture-5c4d61@example.com", "fullName": "Capture User", "role": "ACCOUNT_HOLDER",
+            "isActive": true, "createdAt": "…", "updatedAt": "…" } }
+```
+**Errors:** `400 INVALID_CURRENT_PASSWORD` (400, not 401 – the session itself is still valid)
+```json
+{ "error": { "code": "INVALID_CURRENT_PASSWORD", "message": "Current password is incorrect",
+             "details": [{ "field": "currentPassword", "message": "Current password is incorrect" }] } }
+```
+`400 VALIDATION_ERROR` – weak new password, or the same as the current one
+(`"New password must be different from the current password"`) · `401 UNAUTHENTICATED` · `429 RATE_LIMITED` (wrong current passwords
+count toward the failed-login limit).
 
 ### POST /auth/logout
 
