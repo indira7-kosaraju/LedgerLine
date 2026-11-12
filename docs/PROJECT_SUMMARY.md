@@ -38,7 +38,7 @@ LedgerLine is a learning project that implements these guarantees end to end and
 - **Rate limiting** for login, registration and the whole API, plus `TRUST_PROXY` support so limits use the real client IP behind
   hosting proxies.
 - **Tests:**
-  - 281 backend tests (Jest + Supertest) on a separate test database
+  - 324 backend tests (Jest + Supertest) on a separate test database
   - 24 browser tests (Playwright)
   - 13 frontend unit tests
   - a 56-check smoke test
@@ -138,8 +138,8 @@ The lesson: AI output has to be proven by tests and by the real running system, 
   - the concurrency race
 - **Accepted limitations** (see THREATS.md):
   - Rate limits are kept in memory, per IP. There is no per-account lockout and no MFA.
-  - The app's database role owns its tables, so a database owner could disable the ledger triggers. A real system would run the API
-    with a role that has fewer privileges.
+  - The API now runs as a limited database role locally and in all tests; the live site is switched over only after the
+    production steps in DEPLOYMENT.md. Whoever holds the owner password can still disable the ledger triggers.
   - Render's free plan sleeps when idle, so the first request after a pause is slow.
 - There is no independent penetration test.
 

@@ -4,11 +4,13 @@
 const crypto = require('crypto');
 const {
   app, prisma, request, createUser, createAccount, deposit, withdraw, transfer, balanceOf,
+  ownerDb,
+  disconnectAll,
 } = require('../helpers');
 const { expectHealthyLedger, snapshot } = require('../invariants');
 const { SYSTEM_ACCOUNT_NUMBER } = require('../../src/config/policy');
 
-afterAll(() => prisma.$disconnect());
+afterAll(disconnectAll);
 
 let systemId;
 beforeAll(async () => {
@@ -157,18 +159,18 @@ test('failed withdrawal is rolled back completely (balance update + transaction 
 
   // Simulate a crash when the DEBIT entry is written – AFTER both balances were already
   // updated inside the transaction.
-  await prisma.$executeRawUnsafe(`
+  await ownerDb().$executeRawUnsafe(`
     CREATE OR REPLACE FUNCTION test_fail_debit() RETURNS trigger AS $$
     BEGIN RAISE EXCEPTION 'simulated crash while writing the debit entry'; END; $$ LANGUAGE plpgsql`);
-  await prisma.$executeRawUnsafe(`
+  await ownerDb().$executeRawUnsafe(`
     CREATE TRIGGER test_fail_debit BEFORE INSERT ON ledger_entries
     FOR EACH ROW WHEN (NEW."accountId" = '${account.id}'::uuid AND NEW.direction = 'DEBIT') EXECUTE FUNCTION test_fail_debit()`);
   let res;
   try {
     res = await withdraw(holder, account.id, 5000);
   } finally {
-    await prisma.$executeRawUnsafe('DROP TRIGGER IF EXISTS test_fail_debit ON ledger_entries');
-    await prisma.$executeRawUnsafe('DROP FUNCTION IF EXISTS test_fail_debit()');
+    await ownerDb().$executeRawUnsafe('DROP TRIGGER IF EXISTS test_fail_debit ON ledger_entries');
+    await ownerDb().$executeRawUnsafe('DROP FUNCTION IF EXISTS test_fail_debit()');
   }
 
   expect(res.status).toBe(500);

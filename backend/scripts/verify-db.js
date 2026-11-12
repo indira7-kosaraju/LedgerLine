@@ -83,6 +83,15 @@ async function main() {
   const plaintext = await one(prisma.$queryRaw`SELECT COUNT(*)::int AS n FROM users WHERE "passwordHash" NOT LIKE '$2b$%'`);
   check('Every password is stored as a bcrypt hash', plaintext.n === 0, `${plaintext.n} not bcrypt`);
 
+  // The app's role must not be able to change the schema or switch the triggers above off (scripts/setup-db-roles.js).
+  const role = await one(prisma.$queryRaw`
+    SELECT current_user AS name, r.rolsuper OR r.rolcreaterole OR r.rolbypassrls AS special,
+           has_schema_privilege('public', 'CREATE') AS "canCreate",
+           (SELECT count(*)::int FROM pg_tables WHERE schemaname = 'public' AND tableowner = current_user) AS owned
+    FROM pg_roles r WHERE r.rolname = current_user`);
+  check('Connected as a limited role (owns no tables, cannot create in the schema)', !role.special && !role.canCreate && role.owned === 0,
+    `${role.name}: owns ${role.owned} tables${role.canCreate ? ', can create' : ''}${role.special ? ', has special attributes' : ''}`);
+
   // Report
   const refused = await one(prisma.$queryRaw`SELECT COUNT(*)::int AS n FROM audit_logs WHERE outcome = 'REFUSED'`);
   for (const r of results) console.log(`${r.ok ? '✅' : '❌'} ${r.name}${r.detail ? `  (${r.detail})` : ''}`);

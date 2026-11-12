@@ -26,6 +26,7 @@
     "db:seed:demo": "node prisma/seed-demo.js",
     "db:prepare:production": "node scripts/prepare-production-db.js",
     "admin:bootstrap": "node scripts/bootstrap-admin.js",
+    "db:roles": "node scripts/setup-db-roles.js",
     "db:studio": "prisma studio",
     "db:reset": "prisma migrate reset"
   },

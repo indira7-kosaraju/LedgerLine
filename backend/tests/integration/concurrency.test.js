@@ -3,11 +3,13 @@
 const { Prisma } = require('@prisma/client');
 const {
   prisma, createUser, createAccount, deposit, withdraw, transfer, balanceOf, verifyLedger,
+  ownerDb,
+  disconnectAll,
 } = require('../helpers');
 const { withRetry, isRetryable } = require('../../src/services/transaction.service');
 const { expectHealthyLedger } = require('../invariants');
 
-afterAll(() => prisma.$disconnect());
+afterAll(disconnectAll);
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const statuses = (responses) => responses.map((r) => r.status).sort();
@@ -217,10 +219,10 @@ describe('Rollback', () => {
 
     // Make the CREDIT entry fail for this one account – AFTER both balances were
     // updated and the DEBIT entry was written inside the transaction.
-    await prisma.$executeRawUnsafe(`
+    await ownerDb().$executeRawUnsafe(`
       CREATE OR REPLACE FUNCTION test_fail_credit() RETURNS trigger AS $$
       BEGIN RAISE EXCEPTION 'simulated crash while writing the credit entry'; END; $$ LANGUAGE plpgsql`);
-    await prisma.$executeRawUnsafe(`
+    await ownerDb().$executeRawUnsafe(`
       CREATE TRIGGER test_fail_credit BEFORE INSERT ON ledger_entries
       FOR EACH ROW WHEN (NEW."accountId" = '${to.id}'::uuid) EXECUTE FUNCTION test_fail_credit()`);
 
@@ -229,8 +231,8 @@ describe('Rollback', () => {
     try {
       res = await transfer(holder, from.id, to.id, 12345, key);
     } finally {
-      await prisma.$executeRawUnsafe('DROP TRIGGER IF EXISTS test_fail_credit ON ledger_entries');
-      await prisma.$executeRawUnsafe('DROP FUNCTION IF EXISTS test_fail_credit()');
+      await ownerDb().$executeRawUnsafe('DROP TRIGGER IF EXISTS test_fail_credit ON ledger_entries');
+      await ownerDb().$executeRawUnsafe('DROP FUNCTION IF EXISTS test_fail_credit()');
     }
 
     expect(res.status).toBe(500);
@@ -369,10 +371,10 @@ describe('Day 3 – concurrency verified in PostgreSQL', () => {
     const broken = await createAccount(holder); // writing a credit to this account will fail
     const healthy = await createAccount(holder);
 
-    await prisma.$executeRawUnsafe(`
+    await ownerDb().$executeRawUnsafe(`
       CREATE OR REPLACE FUNCTION test_fail_credit_load() RETURNS trigger AS $$
       BEGIN RAISE EXCEPTION 'simulated crash under load'; END; $$ LANGUAGE plpgsql`);
-    await prisma.$executeRawUnsafe(`
+    await ownerDb().$executeRawUnsafe(`
       CREATE TRIGGER test_fail_credit_load BEFORE INSERT ON ledger_entries
       FOR EACH ROW WHEN (NEW."accountId" = '${broken.id}'::uuid) EXECUTE FUNCTION test_fail_credit_load()`);
     let results;
@@ -381,8 +383,8 @@ describe('Day 3 – concurrency verified in PostgreSQL', () => {
       for (let i = 0; i < 10; i++) jobs.push(transfer(holder, from.id, broken.id, 1000), transfer(holder, from.id, healthy.id, 1000));
       results = await Promise.all(jobs);
     } finally {
-      await prisma.$executeRawUnsafe('DROP TRIGGER IF EXISTS test_fail_credit_load ON ledger_entries');
-      await prisma.$executeRawUnsafe('DROP FUNCTION IF EXISTS test_fail_credit_load()');
+      await ownerDb().$executeRawUnsafe('DROP TRIGGER IF EXISTS test_fail_credit_load ON ledger_entries');
+      await ownerDb().$executeRawUnsafe('DROP FUNCTION IF EXISTS test_fail_credit_load()');
     }
 
     const toBroken = results.filter((_, i) => i % 2 === 0);

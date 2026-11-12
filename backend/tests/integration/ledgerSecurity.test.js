@@ -1,12 +1,13 @@
-// Ledger security: even with direct SQL access as the application's database user,
-// history cannot be changed and the books cannot be made to not balance.
-const { prisma, createUser, createAccount, deposit, balanceOf, verifyLedger } = require('../helpers');
+// Ledger security, layer 2: even with direct SQL access as the table OWNER, history cannot be
+// changed and the books cannot be made to not balance (the triggers stop it).
+// Layer 1 – the API role is not even allowed to try – is tested in dbRoles.test.js.
+const { prisma, ownerDb, disconnectAll, createUser, createAccount, deposit, balanceOf, verifyLedger } = require('../helpers');
 
-afterAll(() => prisma.$disconnect());
+afterAll(disconnectAll);
 
-// Runs SQL in its own transaction, so deferred (commit-time) checks are included.
+// Runs SQL as the OWNER in its own transaction, so deferred (commit-time) checks are included.
 const sql = (statements) =>
-  prisma.$transaction(async (tx) => {
+  ownerDb().$transaction(async (tx) => {
     for (const s of [].concat(statements)) await tx.$executeRawUnsafe(s);
   });
 

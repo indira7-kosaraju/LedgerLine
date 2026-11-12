@@ -11,7 +11,7 @@ test show it. Where it says *mutation-tested*, the protection was temporarily re
 
 - Test files are in `backend/tests/integration/` (Jest + Supertest, run against the separate `ledgerline_test` database) and
   `frontend/e2e/` (Playwright in Chrome). Test names are quoted exactly as Jest/Playwright print them.
-- Run everything: `cd backend && npm test` (281 tests) · `cd frontend && npm run test:e2e` (24 tests).
+- Run everything: `cd backend && npm test` (324 tests) · `cd frontend && npm run test:e2e` (24 tests).
 - Related: [docs/SECURITY_AUDIT.md](docs/SECURITY_AUDIT.md) – the Day 3 audit with the actual result of each attack.
 
 ## Summary
@@ -238,8 +238,15 @@ transaction's amount, or `UPDATE accounts SET balance = balance + 100000` (money
 
 The API has no routes that edit history. `GET /api/ledger/verify` and `npm run verify:db` recompute everything as an independent audit.
 
+**Layer 1 – the API's database role cannot even try.** The API connects as `ledgerline_api`, a separate role with only row
+privileges (`backend/scripts/setup-db-roles.js`): `SELECT/INSERT` on `transactions`, `ledger_entries` and `audit_logs` (no UPDATE,
+DELETE or TRUNCATE), `SELECT/INSERT/UPDATE` on `users` and `accounts`, `DELETE` only on `idempotency_keys`, no access to
+`_prisma_migrations`, no CREATE in the schema, no special attributes. It does not own the tables, so it cannot disable or drop a
+trigger. Migrations and role setup use the table **owner** through a separate `DIRECT_DATABASE_URL` that the server never has.
+
 **Implemented protection.** `backend/prisma/migrations/20261106163849_init/migration.sql` (append-only triggers, CHECKs) and
-`backend/prisma/migrations/20261107140000_ledger_integrity_triggers/migration.sql`; `backend/scripts/verify-db.js`.
+`backend/prisma/migrations/20261107140000_ledger_integrity_triggers/migration.sql`; `backend/scripts/setup-db-roles.js` (roles);
+`backend/scripts/verify-db.js` (also checks that the connected role owns no tables).
 
 **Corresponding tests.**
 - `ledgerSecurity.test.js` › "UPDATE a ledger entry → refused", "DELETE a ledger entry → refused", "TRUNCATE the ledger → refused", "UPDATE a transaction amount → refused", "UPDATE an audit record → refused", "TRUNCATE the audit log → refused"
@@ -247,12 +254,17 @@ The API has no routes that edit history. `GET /api/ledger/verify` and `npm run v
 - `ledgerSecurity.test.js` › "unbalanced entries (debit ₹1.00, credit ₹0.90) → refused at commit"
 - `security.test.js` › "ledger records cannot be changed through the API (no such routes exist)"
 - The independent SQL oracle (`tests/invariants.js`) was itself proven: with one trigger disabled on the test DB, adding ₹0.01 was reported immediately.
+- `dbRoles.test.js` › as the API role, 21 statements are refused by PostgreSQL ("disable the append-only trigger", "drop a trigger",
+  "skip triggers with session_replication_role", "DELETE ledger entries", "UPDATE a transaction", "TRUNCATE the ledger", "create a
+  role", …); "its privileges are EXACTLY the planned list"; "re-running takes away a privilege that was granted by hand"; "a table that
+  is not in the privilege list → the script refuses"; "password form: SCRAM hash locally, plain text (over TLS) only for Neon"
+  (Neon refuses pre-hashed passwords; a Neon owner URL without `sslmode=require` is refused, and passwords never appear in error
+  messages). The tamper tests in `ledgerSecurity.test.js` run as the **owner** (layer 2).
 
 **Remaining accepted risks.**
-- ⚠️ **The application's database role `ledgerline_app` owns the tables.** It is not a superuser, but a table owner can disable that
-  table's triggers (this was done deliberately in a test on `ledgerline_test`). Someone who steals the application's database
-  password could therefore switch the protections off. Recommended for production: run migrations as an owner role and the API as
-  a separate role with only `SELECT/INSERT/UPDATE` privileges.
+- ⚠️ **Production is not switched over yet** (2026-11-11): the live API still connects as Neon's owner role until the production steps
+  in `docs/DEPLOYMENT.md` are carried out. Locally and in all tests the API already runs as `ledgerline_api`.
+- Whoever has the **owner** password (`DIRECT_DATABASE_URL`, kept only on the operator's computer) can still disable the triggers.
 - A database superuser or host compromise is out of scope.
 
 ## 9. Partial transaction failures
@@ -401,7 +413,7 @@ Behind a hosting proxy, `TRUST_PROXY` makes the limit apply to the real client I
 
 ## All remaining accepted risks
 
-1. The app's database role owns the tables and could disable triggers (threat 8) – use a DML-only runtime role in production.
+1. Production still runs as the database owner until the role switch in docs/DEPLOYMENT.md is done; the owner password itself can disable triggers (threat 8).
 2. Rate limits are in memory and per IP; no per-account lockout, CAPTCHA or MFA (threat 13).
 3. Stolen tokens stay valid for up to 1 hour unless the owner logs out (threat 12); logout signs out all devices.
 4. Idempotency keys expire after 24 hours and are not cleaned up by a job (threat 1).

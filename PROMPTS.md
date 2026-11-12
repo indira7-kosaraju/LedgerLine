@@ -43,6 +43,7 @@ or incomplete, how that was found, and how it was fixed.
 | 21 | 2026-11-07 | Day 3 · README and API docs | documentation, **idempotency** (demo seed) | `docs: complete README and API documentation` |
 | 22 | 2026-11-08 | Day 3 · Deployment | deployment, **security** (cookies, proxies, secrets) | `chore: finalize deployment configuration` |
 | 23 | 2026-11-11 | Update · Step 1 | **security**, authentication, admin bootstrap | `feat: add secure first-admin bootstrap and password change` |
+| 24 | 2026-11-11 | Update · Step 2 | **security**, database roles, ledger integrity | `security: run the API as a limited database role` |
 
 ---
 
@@ -729,6 +730,62 @@ output. **Not yet done:** running the bootstrap against the production database 
 
 ---
 
+## Entry 24 – Separate PostgreSQL roles and the direct migration connection (step 2)
+
+**Date:** 2026-11-11
+
+**Prompt given to AI:** "Start Step 2 – Separate PostgreSQL database roles and permissions. Also fix the Neon database connection
+configuration so Prisma migrations use the direct connection. First inspect the existing implementation…" – then "approve step 2,
+option A … local code changes and tests only".
+
+**What AI generated:** `backend/scripts/setup-db-roles.js` (`npm run db:roles`), `directUrl` in `schema.prisma`, the two-URL layout
+in `.env.example` / `.env.test.example`, owner-connection helpers for tests, `tests/integration/dbRoles.test.js` (43 tests), a 14th
+check in `verify-db.js`, stricter `prepare-production-db.js` and `prepare-test-db.js`, `render.yaml` without migrations (option A),
+and documentation.
+
+**What was incorrect or incomplete:**
+1. **Found in the inspection:** the API connected as the owner of every table – locally `ledgerline_app`, on Neon `neondb_owner`
+   (member of `neon_superuser`, CREATEROLE, BYPASSRLS) – so it could disable the ledger triggers; migrations ran through Neon's pooler.
+2. **The AI's first role script** used `ALTER ROLE … NOSUPERUSER` on re-runs; PostgreSQL refuses that from a non-superuser even when
+   nothing changes (42501), so the second run failed.
+3. **The AI's first connection cap (20)** was too low: Prisma's default pool is about 2 × CPU cores + 1 per process, and the test
+   suite's simultaneous requests failed with "too many connections for role ledgerline_api" (9 failing tests).
+4. Six existing tests created fault-injection triggers or tampered with tables through the app's connection; as the limited role
+   PostgreSQL refused them.
+5. **Found on the first production run (P2, 2026-11-12):** the AI's script sent the role password as a pre-computed SCRAM hash. Local
+   PostgreSQL accepts that, but Neon's control plane rejected it ("Neon only supports being given plaintext passwords"). The error came
+   at the first statement inside the transaction, so nothing was created – checked read-only afterwards: no `ledgerline_api` role, 0 grants.
+6. **Found on the second production run:** the role transaction used Prisma's default 5-second limit. On Neon each statement is a
+   network round trip (~130 ms) and CREATE ROLE goes through the control plane, so the transaction was cut off ("Transaction not
+   found") and rolled back – again checked read-only: no role, 0 grants.
+
+**How the issue was identified:** (1) read-only queries on both databases (`current_user`, table owners, role attributes, memberships);
+(2) running the script twice; (3)–(4) the full test run; (5)–(6) the error messages of the production runs.
+
+**How it was corrected:** (1) a separate `ledgerline_api` role with only row privileges and the owner only in `DIRECT_DATABASE_URL`;
+(2) re-runs set only attributes the owner may change, and the report fails if any special attribute is on; (3) cap 50, plus
+`connection_limit` in the production URL; (4) an explicit owner connection (`ownerDb()`) for those tests – the tamper tests now prove
+that the triggers stop even the owner, and `dbRoles.test.js` proves the API role cannot try; (5) for `*.neon.tech` hosts the password
+is sent as plain text over TLS (refused without `sslmode=require`), elsewhere still as a SCRAM hash, and passwords and connection strings
+are removed from every error message; (6) a 60-second limit for the (still single, all-or-nothing) role transaction, and the
+script prints how long it took.
+
+**How it was verified:** backend 324/324 (15 suites, after fixes 5–6), Playwright 24/24, frontend unit 13/13, smoke test 56/56 against a dev server
+running as `ledgerline_api`, `verify:db` 14/14 (and the new check fails when connected as the owner). Mutation tests: DELETE on
+`ledger_entries` granted → 2 failures; UPDATE on `transactions` → 1; unlisted-table check removed → 1. The API started and served
+login without `DIRECT_DATABASE_URL` (as on Render), and `prisma generate` ran without any database variables. Both production commands
+refused the old `.env.production` without connecting. Fix 5: 10 new tests; mutations (host check loosened → 2 failures, redaction
+removed → 1, plain text never chosen → 3, sslmode check removed → 1). Local PostgreSQL uses "trust" authentication, so password checks
+can't be tested there; checked once by hand as superuser with a temporary role: in plain-text mode PostgreSQL stored a SCRAM hash (not
+the password), the new password verified against it and the previous one did not – also on re-runs (ALTER ROLE). Fix 6: a test that slows the role transaction to 6 s still commits with exactly the planned
+privileges; with the limit removed it fails with "The timeout for this transaction was 5000 ms". **Not done:** anything on Neon or Render (waiting for my approval).
+
+**Related commit:** `security: run the API as a limited database role`
+
+**My review notes:** _(to be completed by me)_
+
+---
+
 ## Commit references
 
 The AI cannot know commit hashes and did not run Git. Fill in the hash column with:
@@ -762,3 +819,4 @@ git log --oneline --reverse
 | 20, 21 | `docs: complete README and API documentation` | |
 | 22 | `chore: finalize deployment configuration` | |
 | 23 | `feat: add secure first-admin bootstrap and password change` | |
+| 24 | `security: run the API as a limited database role` | |

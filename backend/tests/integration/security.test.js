@@ -2,10 +2,12 @@
 const crypto = require('crypto');
 const {
   app, prisma, request, newKey, createUser, createAccount, deposit, transfer, balanceOf,
+  ownerDb,
+  disconnectAll,
 } = require('../helpers');
 const { expectHealthyLedger } = require('../invariants');
 
-afterAll(() => prisma.$disconnect());
+afterAll(disconnectAll);
 
 const PASSWORD = 'Secret123';
 const sessionCookie = (res) => (res.headers['set-cookie'] || []).find((c) => c.startsWith('ll_session='));
@@ -234,8 +236,8 @@ describe('Security headers, CORS, and error responses', () => {
     const from = await createAccount(holder);
     const to = await createAccount(holder);
     await deposit(holder, from.id, 1000);
-    await prisma.$executeRawUnsafe(`CREATE OR REPLACE FUNCTION test_fail_prod() RETURNS trigger AS $$ BEGIN RAISE EXCEPTION 'internal detail: secret_table_name'; END; $$ LANGUAGE plpgsql`);
-    await prisma.$executeRawUnsafe(`CREATE TRIGGER test_fail_prod BEFORE INSERT ON ledger_entries FOR EACH ROW WHEN (NEW."accountId" = '${to.id}'::uuid) EXECUTE FUNCTION test_fail_prod()`);
+    await ownerDb().$executeRawUnsafe(`CREATE OR REPLACE FUNCTION test_fail_prod() RETURNS trigger AS $$ BEGIN RAISE EXCEPTION 'internal detail: secret_table_name'; END; $$ LANGUAGE plpgsql`);
+    await ownerDb().$executeRawUnsafe(`CREATE TRIGGER test_fail_prod BEFORE INSERT ON ledger_entries FOR EACH ROW WHEN (NEW."accountId" = '${to.id}'::uuid) EXECUTE FUNCTION test_fail_prod()`);
     try {
       const res = await request(isolatedApp).post('/api/transactions/transfer').set(holder.auth).set('Idempotency-Key', newKey())
         .send({ fromAccountId: from.id, toAccountId: to.id, amountPaise: 100 });
@@ -246,8 +248,8 @@ describe('Security headers, CORS, and error responses', () => {
       const reg = await request(isolatedApp).post('/api/auth/register').send({ email: `prod-${crypto.randomUUID()}@test.local`, password: PASSWORD, fullName: 'Prod Cookie' });
       expect(sessionCookie(reg)).toMatch(/;\s*Secure/i);
     } finally {
-      await prisma.$executeRawUnsafe('DROP TRIGGER IF EXISTS test_fail_prod ON ledger_entries');
-      await prisma.$executeRawUnsafe('DROP FUNCTION IF EXISTS test_fail_prod()');
+      await ownerDb().$executeRawUnsafe('DROP TRIGGER IF EXISTS test_fail_prod ON ledger_entries');
+      await ownerDb().$executeRawUnsafe('DROP FUNCTION IF EXISTS test_fail_prod()');
       await isolatedPrisma.$disconnect();
     }
   });

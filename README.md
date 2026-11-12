@@ -62,7 +62,7 @@ can be re-derived from the ledger at any time ("a ledger you can prove").
 - Double-entry ledger with database-enforced integrity; idempotent money movement; row-level locking.
 - Role-based access control checked on the server for every request; full audit trail including refusals.
 - Helmet, strict CORS, CSRF protection, rate limiting, input validation, safe error responses.
-- 281 backend tests, 24 browser tests, 13 frontend unit tests.
+- 324 backend tests, 24 browser tests, 13 frontend unit tests.
 
 ## 4. Technology stack
 
@@ -251,7 +251,7 @@ The rules that matter most are enforced **by PostgreSQL**, not only by applicati
 | At commit, every changed balance equals its latest ledger balance | deferred `accounts_balance_matches_ledger` trigger |
 | A request is processed at most once | `UNIQUE(userId, key)` in the same transaction |
 
-**Verify any time:** `GET /api/ledger/verify` (admin/auditor) or `npm run verify:db` (13 read-only checks, e.g. all balances sum to ₹0,
+**Verify any time:** `GET /api/ledger/verify` (admin/auditor) or `npm run verify:db` (14 read-only checks, e.g. all balances sum to ₹0,
 every balance equals credits − debits). Tests use a separate, independent SQL checker (`backend/tests/invariants.js`).
 
 ## 12. API endpoints
@@ -282,14 +282,16 @@ Full reference with request bodies, real responses and error codes: **[docs/API.
 ```bash
 # 1. Database (macOS / Homebrew)
 brew services start postgresql@17
-psql -d postgres -c "CREATE ROLE ledgerline_app WITH LOGIN PASSWORD 'choose-a-password' CREATEDB;"
+# the table OWNER (migrations only). CREATEROLE lets "npm run db:roles" create the limited API role.
+psql -d postgres -c "CREATE ROLE ledgerline_app WITH LOGIN PASSWORD 'choose-a-password' CREATEDB CREATEROLE;"
 createdb -O ledgerline_app ledgerline
 
 # 2. Backend
 cd backend
-cp .env.example .env            # set DATABASE_URL and JWT_SECRET (see below)
+cp .env.example .env            # set DATABASE_URL (API role), DIRECT_DATABASE_URL (owner), JWT_SECRET
 npm install                     # also runs `prisma generate`
-npm run db:deploy               # apply all migrations
+npm run db:deploy               # apply all migrations (as the owner)
+npm run db:roles                # create ledgerline_api with exactly its privileges
 npm run db:seed                 # SYSTEM account (+ optional dev admin/auditor from SEED_*)
 npm run admin:bootstrap -- --email you@example.org --name "Your Name"   # first admin
 npm run db:seed:demo            # optional: demo users and transactions
@@ -341,11 +343,11 @@ invalid values.
 
 | Command (folder) | What it covers | Result |
 |---|---|---|
-| `npm test` (backend) | Jest + Supertest: auth, authorization, accounts, transactions, **financial integrity**, **idempotency**, **concurrency**, ledger tampering, security audit, rate limits, **first-admin bootstrap**, change password | 281 tests |
+| `npm test` (backend) | Jest + Supertest: auth, authorization, accounts, transactions, **financial integrity**, **idempotency**, **concurrency**, ledger tampering, security audit, rate limits, **first-admin bootstrap**, change password, database roles | 324 tests |
 | `npm test` (frontend) | amount parsing (no floating point), validation, error messages, idempotency keys | 13 tests |
 | `npm run test:e2e` (frontend) | Playwright in Chrome: registration, login, protected routes, roles, money forms, history, error handling, lost-response retry, change password | 24 tests |
 | `npm run smoke` (backend) | end-to-end API check against your running dev server | 56 checks |
-| `npm run verify:db` (backend) | read-only check of the real database | 13 checks |
+| `npm run verify:db` (backend) | read-only check of the real database (incl. "connected as a limited role") | 14 checks |
 
 One-time setup for the test database:
 
@@ -420,14 +422,14 @@ entry. Every user can change their password on the **Profile** page (other sessi
 ## 19. Limitations and future enhancements
 
 **Known limitations** (details in [THREATS.md](THREATS.md)):
-- The application's database role owns the tables and could disable triggers – production should use a separate DML-only role.
+- The API runs as a limited database role (`ledgerline_api`); **production is switched over only after the steps in docs/DEPLOYMENT.md**.
 - Rate limits are per IP and kept in memory (not shared between server instances); no account lockout, CAPTCHA or MFA.
 - A stolen session token works for up to 1 hour unless the user logs out; logout signs out all devices.
 - Idempotency keys expire after 24 hours and are not cleaned up by a scheduled job.
 - All deposits and withdrawals serialize on the single SYSTEM account row (throughput, not safety).
 - INR only; per-transaction limits, no daily limits; no independent penetration test.
 
-**Future enhancements:** separate database roles for migrations and runtime · Redis-backed rate limiting · MFA and per-device
+**Future enhancements:** Redis-backed rate limiting · MFA and per-device
 sessions · scheduled cleanup of expired idempotency keys · daily limits and scheduled transfers · CSV/PDF statements ·
 multi-currency with exchange rates · CI pipeline running all test suites on every push.
 

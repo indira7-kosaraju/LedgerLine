@@ -6,6 +6,13 @@ const request = require('supertest');
 const app = require('../src/app');
 const prisma = require('../src/config/prisma');
 const { signAccessToken } = require('../src/utils/jwt');
+const { PrismaClient } = require('@prisma/client');
+
+// The app (and `prisma` above) connects as the limited API role, which cannot create triggers or
+// touch history. Tests that inject faults or attack the tables directly use the table OWNER.
+let ownerClient;
+const ownerDb = () => (ownerClient ??= new PrismaClient({ datasources: { db: { url: process.env.DIRECT_DATABASE_URL } } }));
+const disconnectAll = () => Promise.all([prisma.$disconnect(), ownerClient?.$disconnect()]);
 
 const PASSWORD_HASH = bcrypt.hashSync('Secret123', 10);
 const newKey = () => crypto.randomUUID();
@@ -50,4 +57,4 @@ async function verifyLedger() {
   return res.body;
 }
 
-module.exports = { app, prisma, request, newKey, createUser, createAccount, deposit, withdraw, transfer, balanceOf, countTransactions, verifyLedger };
+module.exports = { app, prisma, ownerDb, disconnectAll, request, newKey, createUser, createAccount, deposit, withdraw, transfer, balanceOf, countTransactions, verifyLedger };

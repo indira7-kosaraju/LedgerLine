@@ -6,9 +6,14 @@ generator client {
   provider = "prisma-client-js"
 }
 
+// Two connections, two database roles (see scripts/setup-db-roles.js):
+//   url       – the API's limited role (rows only). Neon: the POOLED host, with pgbouncer=true.
+//   directUrl – the table OWNER, used only by `prisma migrate`. Neon: the DIRECT host (no "-pooler"),
+//               because migrations need a real session (advisory lock), not a pooled one.
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_DATABASE_URL")
 }
 
 // ─────────────────────────── Enums ───────────────────────────
