@@ -4,6 +4,8 @@ module.exports = {
   testMatch: ['<rootDir>/tests/**/*.test.js'],
   // Loads .env.test before any app code reads the environment.
   setupFiles: ['<rootDir>/tests/setup/env.js'],
+  // Closes each test file's Redis connection when the file is done.
+  setupFilesAfterEnv: ['<rootDir>/tests/setup/closeRedis.js'],
   // Applies migrations + seed to the TEST database once before all tests.
   globalSetup: '<rootDir>/tests/setup/globalSetup.js',
   // Integration tests share one database, so run test files one after another.

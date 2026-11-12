@@ -11,7 +11,7 @@ test show it. Where it says *mutation-tested*, the protection was temporarily re
 
 - Test files are in `backend/tests/integration/` (Jest + Supertest, run against the separate `ledgerline_test` database) and
   `frontend/e2e/` (Playwright in Chrome). Test names are quoted exactly as Jest/Playwright print them.
-- Run everything: `cd backend && npm test` (324 tests) · `cd frontend && npm run test:e2e` (24 tests).
+- Run everything: `cd backend && npm test` (344 tests) · `cd frontend && npm run test:e2e` (24 tests).
 - Related: [docs/SECURITY_AUDIT.md](docs/SECURITY_AUDIT.md) – the Day 3 audit with the actual result of each attack.
 
 ## Summary
@@ -30,7 +30,7 @@ test show it. Where it says *mutation-tested*, the protection was temporarily re
 | 10 | Idempotency key reuse | ✅ Mitigated | SHA-256 fingerprint of endpoint + body | `idempotency.test.js` (mutation-tested) |
 | 11 | Deadlocks | ✅ Mitigated | Locks always taken in sorted order; retry on deadlock | `concurrency.test.js` |
 | 12 | Replay attacks | ✅ Mitigated (fixed Day 3) | Idempotent replays; session version revokes tokens on logout | `security.test.js` (mutation-tested) |
-| 13 | Brute-force login attempts | ⚠️ Partially | Per-IP rate limit; bcrypt; generic errors | `rateLimit.test.js`, `auth.test.js` |
+| 13 | Brute-force login attempts | ⚠️ Partially (improved in step 3) | Redis-backed limits per IP **and per account**, fail closed; bcrypt; generic errors | `redisRateLimit.test.js`, `redisDown.test.js`, `rateLimit.test.js`, `auth.test.js` |
 
 ---
 
@@ -376,25 +376,46 @@ user's status. Logout ends the user's sessions on **all** devices (no per-device
 
 **Possible impact.** Account takeover.
 
-**Prevention mechanism.** Failed logins are limited to 10 per 15 minutes per client IP (`429` with `Retry-After`); registrations to
-10 per hour. Passwords need 8+ characters with upper case, lower case and a digit, and are stored with bcrypt (cost 12), which makes
+**Prevention mechanism.** Failed logins are limited to 10 per 15 minutes per client IP **and** 10 per 15 minutes per account
+(email, from any IP – wrong current passwords on change-password count too); while an account is locked even the correct password
+gets `429`, and unknown emails are limited the same way, so the limit reveals nothing about which accounts exist. Registrations are
+limited to 10 per hour per IP. Since step 3 the counters live in **Redis**: they survive restarts and deploys and are shared by all
+server instances, keys are per environment (`ll:prod:` …) and accounts appear only as a SHA-256 hash, never as an email. If Redis is
+unreachable, login, registration and change-password **fail closed** (`503 SERVICE_UNAVAILABLE`, no request is let through unlimited);
+the rest of the API fails open, and `/api/health/ready` reports `redis: failed`. In production the server refuses to start without a
+working Redis, so it can never silently fall back to per-process memory counters. Passwords need 8+ characters with upper case, lower case and a digit, and are stored with bcrypt (cost 12), which makes
 each guess slow. Wrong password, unknown email and deactivated account all return the same message, and a dummy bcrypt comparison
 makes their timing similar, so attackers can't learn which emails exist. Every failed login is audited with its real reason.
 Behind a hosting proxy, `TRUST_PROXY` makes the limit apply to the real client IP (fixed Day 3).
 
-**Implemented protection.** `backend/src/routes/auth.routes.js` (limiters, `AUTH_LOGIN_FAILURE_LIMIT`, `AUTH_REGISTER_LIMIT`),
+**Implemented protection.** `backend/src/middleware/rateLimiters.js` (all limiters, fail-closed wrapper, account key),
+`backend/src/config/redis.js` (connection, 1 s command timeout, fail fast after the first failed connection),
+`backend/src/server.js` (Redis required in production), `backend/src/routes/auth.routes.js` (which limiter guards which route),
 `backend/src/services/auth.service.js` (bcrypt, `DUMMY_HASH`, generic error), `backend/src/app.js` (`trust proxy`).
 
 **Corresponding tests.**
 - `rateLimit.test.js` › "after 3 failed logins the 4th attempt is blocked with 429 and Retry-After" (limit set to 3 for the test)
 - `rateLimit.test.js` › "registration is limited per IP"
+- `redisRateLimit.test.js` › "after 3 failures even the CORRECT password gets 429 – but other accounts are not affected" (limit 3),
+  "the email is normalised", "an unknown email is limited the same way", "wrong current passwords on change-password count toward
+  the same account limit", "shared by two server instances, and still there after a "restart"", "keys use the environment prefix,
+  contain no email address, and expire"
+- `redisDown.test.js` › "login, registration and change-password are refused with 503 – never let through unlimited", "the rest of
+  the API keeps working (general limit fails open)", "readiness is 503 and only names the failed check"
+- `serverStartup.test.js` › "production without REDIS_URL → refuses to start", "production with an unreachable Redis → refuses to start"
+- Mutation-tested (step 3): limits failing open, the account limiter removed, counters in memory instead of Redis, emails not
+  normalised, production starting without Redis – each made at least one of these tests fail.
 - `auth.test.js` › "wrong password and unknown email give the SAME 401 message"
 - `auth.test.js` › "weak password (too short) → 400" (also "no uppercase", "no digit", "over 72 bytes")
 - `security.test.js` › "TRUST_PROXY=1: the address added by the proxy is used – a client cannot spoof it by prepending its own"
 
 **Remaining accepted risks (why this is only "partially" mitigated).**
-- Rate-limit counters live in server memory: they reset on restart and are not shared between several server instances.
-- The limit is per IP: a botnet with many IPs is slowed only by bcrypt, and there is no per-account lockout, CAPTCHA or MFA.
+- **Lockout as denial of service:** anyone who knows an email address can lock that account for up to 15 minutes with 10 wrong
+  passwords (the price of a per-account limit). No CAPTCHA, MFA or unlock-by-email.
+- **Redis outage = nobody can sign in** until Redis is back (deliberate: fail closed). Sessions that already exist keep working.
+- Render's free Key Value instance keeps data in memory only: if it restarts, all counters start from zero (a restart of the API
+  alone no longer resets them).
+- A botnet guessing *different* accounts from many IPs is slowed only by bcrypt and the per-account limit.
 - Equal timing for wrong password vs. unknown email was measured manually on Day 1 (~0.2 s each); it is not an automated test.
 
 ---
@@ -416,7 +437,7 @@ Behind a hosting proxy, `TRUST_PROXY` makes the limit apply to the real client I
 ## All remaining accepted risks
 
 1. Whoever holds the database owner password (kept only on the operator's computer, never on Render) can still disable the triggers (threat 8).
-2. Rate limits are in memory and per IP; no per-account lockout, CAPTCHA or MFA (threat 13).
+2. Rate limits (Redis, per IP and per account): the account lockout can be triggered by others, a Redis outage blocks sign-in, no CAPTCHA or MFA (threat 13).
 3. Stolen tokens stay valid for up to 1 hour unless the owner logs out (threat 12); logout signs out all devices.
 4. Idempotency keys expire after 24 hours and are not cleaned up by a job (threat 1).
 5. Deposits and withdrawals serialize on the SYSTEM account row (throughput, not safety) (threat 2).

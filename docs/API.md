@@ -63,6 +63,7 @@ Every error has the same shape:
 | 422 | Valid request, refused by a business rule | `INSUFFICIENT_FUNDS`, `AMOUNT_EXCEEDS_LIMIT`, `ACCOUNT_NOT_ACTIVE`, `DESTINATION_NOT_ACTIVE`, `IDEMPOTENCY_KEY_REUSED` |
 | 429 | Too many requests (`Retry-After` header in seconds) | `RATE_LIMITED` |
 | 500 | Unexpected server error (no internal details are returned) | `INTERNAL_ERROR` |
+| 503 | Sign-in temporarily unavailable – the rate-limit store (Redis) is unreachable, so login, register and change-password are refused rather than left unlimited | `SERVICE_UNAVAILABLE` |
 
 Refused attempts (400/403/404/422 on money and account actions) are recorded in the audit log.
 
@@ -77,6 +78,8 @@ List endpoints accept `page` (default 1) and `limit` (default 20, max 100) and r
 | Method | Endpoint | Auth | Role |
 |---|---|---|---|
 | GET | [/health](#get-health) | – | – |
+| GET | [/health/live](#get-healthlive) | – | – |
+| GET | [/health/ready](#get-healthready) | – | – |
 | POST | [/auth/register](#post-authregister) | – | – |
 | POST | [/auth/login](#post-authlogin) | – | – |
 | GET | [/auth/me](#get-authme) | ✅ | any |
@@ -113,13 +116,45 @@ Server and database status. No authentication.
 ```
 **503** with `"status": "degraded", "database": "unreachable"` if PostgreSQL cannot be reached.
 
+Health routes are **not** rate limited (the host polls them constantly).
+
+### GET /health/live
+
+Liveness: the process is running. Touches neither the database nor Redis.
+
+**Response 200**
+```json
+{ "status": "alive", "uptimeSeconds": 3 }
+```
+
+### GET /health/ready
+
+Readiness: may this server receive traffic? Render's health check (`render.yaml`) – a new deploy only goes live when this is 200.
+Every check must pass within 2 seconds; the result is reused for 2 seconds (`Cache-Control: no-store`).
+
+| Check | Passes when |
+|---|---|
+| `database` | a query works |
+| `redis` | the rate-limit store answers `PING` (in development without `REDIS_URL`: `"not_configured"`, still ready) |
+| `schema` | the 9 ledger-protection triggers and 5 CHECK constraints from the migrations exist (a missing migration shows up here) |
+| `dbRole` | the API runs as a limited role: owns no tables, cannot create, no superuser/CREATEROLE/CREATEDB/BYPASSRLS/REPLICATION |
+
+**Response 200** (captured from a local server)
+```json
+{ "status": "ready", "checks": { "database": "ok", "redis": "ok", "schema": "ok", "dbRole": "ok" }, "timestamp": "2026-11-12T08:06:09.860Z" }
+```
+**Response 503** – here with Redis stopped. Only the name of the failed check is returned; the reason goes to the server log.
+```json
+{ "status": "not_ready", "checks": { "database": "ok", "redis": "failed", "schema": "ok", "dbRole": "ok" }, "timestamp": "2026-11-12T08:06:22.955Z" }
+```
+
 ---
 
 ## Authentication
 
 ### POST /auth/register
 
-Creates an **ACCOUNT_HOLDER** and signs in (sets the session cookie). Rate limit: 10 per hour per IP.
+Creates an **ACCOUNT_HOLDER** and signs in (sets the session cookie). Rate limit: 10 per hour per IP (counters in Redis).
 
 **Request**
 ```json
@@ -136,7 +171,7 @@ Creates an **ACCOUNT_HOLDER** and signs in (sets the session cookie). Rate limit
   "token": "eyJhbGciOiJIUzI1NiIs…"
 }
 ```
-**Errors:** `400 VALIDATION_ERROR` (with `details` per field) · `409 EMAIL_TAKEN` · `429 RATE_LIMITED`
+**Errors:** `400 VALIDATION_ERROR` (with `details` per field) · `409 EMAIL_TAKEN` · `429 RATE_LIMITED` · `503 SERVICE_UNAVAILABLE`
 
 ### POST /auth/login
 
@@ -148,7 +183,15 @@ Creates an **ACCOUNT_HOLDER** and signs in (sets the session cookie). Rate limit
 ```json
 { "error": { "code": "INVALID_CREDENTIALS", "message": "Invalid email or password" } }
 ```
-`429 RATE_LIMITED` after 10 failed logins per 15 minutes per IP (with `Retry-After`).
+`429 RATE_LIMITED` (with `Retry-After`) after 10 failed logins per 15 minutes **per IP**, or 10 failed attempts per 15 minutes **per
+account** from any IP (wrong current passwords on change-password count too). While an account is locked, even the correct password
+gets 429 – with the same response for existing and unknown emails, so the limit reveals nothing about which accounts exist.
+Successful logins do not count.
+
+`503 SERVICE_UNAVAILABLE` if Redis is unreachable (captured from a local server with Redis stopped):
+```json
+{ "error": { "code": "SERVICE_UNAVAILABLE", "message": "Sign-in is temporarily unavailable. Please try again in a minute." } }
+```
 
 ### GET /auth/me
 
@@ -181,7 +224,7 @@ tokens → `401 SESSION_REVOKED`); this browser receives a new session cookie an
 ```
 `400 VALIDATION_ERROR` – weak new password, or the same as the current one
 (`"New password must be different from the current password"`) · `401 UNAUTHENTICATED` · `429 RATE_LIMITED` (wrong current passwords
-count toward the failed-login limit).
+count toward the failed-login limits per IP and per account) · `503 SERVICE_UNAVAILABLE` (Redis unreachable).
 
 ### POST /auth/logout
 

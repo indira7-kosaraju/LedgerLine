@@ -61,8 +61,11 @@ can be re-derived from the ledger at any time ("a ledger you can prove").
 **Platform**
 - Double-entry ledger with database-enforced integrity; idempotent money movement; row-level locking.
 - Role-based access control checked on the server for every request; full audit trail including refusals.
-- Helmet, strict CORS, CSRF protection, rate limiting, input validation, safe error responses.
-- 324 backend tests, 24 browser tests, 13 frontend unit tests.
+- Helmet, strict CORS, CSRF protection, input validation, safe error responses.
+- Rate limits in **Redis** (shared by all server instances, survive restarts): per IP, plus a per-account login lockout;
+  sign-in fails closed (503) if Redis is down.
+- Liveness and readiness checks (`/api/health/live`, `/api/health/ready`: database, Redis, ledger protections, limited DB role).
+- 344 backend tests, 24 browser tests, 13 frontend unit tests.
 
 ## 4. Technology stack
 
@@ -260,7 +263,7 @@ Full reference with request bodies, real responses and error codes: **[docs/API.
 
 | Method | Endpoint | Auth | Role |
 |---|---|---|---|
-| GET | `/api/health` | – | – |
+| GET | `/api/health` · `/api/health/live` · `/api/health/ready` | – | – |
 | POST | `/api/auth/register` · `/api/auth/login` | – | – |
 | GET | `/api/auth/me` | ✅ | any |
 | POST | `/api/auth/logout` | optional | any |
@@ -277,7 +280,8 @@ Full reference with request bodies, real responses and error codes: **[docs/API.
 
 ## 13. Installation
 
-**Prerequisites:** Node.js ≥ 20 (developed on 26), PostgreSQL 17 (`brew install postgresql@17` on macOS), Google Chrome (for browser tests).
+**Prerequisites:** Node.js ≥ 20 (developed on 26), PostgreSQL 17 (`brew install postgresql@17` on macOS), Docker (for a local Redis),
+Google Chrome (for browser tests).
 
 ```bash
 # 1. Database (macOS / Homebrew)
@@ -286,9 +290,12 @@ brew services start postgresql@17
 psql -d postgres -c "CREATE ROLE ledgerline_app WITH LOGIN PASSWORD 'choose-a-password' CREATEDB CREATEROLE;"
 createdb -O ledgerline_app ledgerline
 
+# Redis for rate-limit counters – listens on this computer only, keeps nothing on disk
+docker run -d --name ledgerline-redis --restart unless-stopped -p 127.0.0.1:6379:6379 redis:7.4.2-alpine redis-server --save "" --appendonly no
+
 # 2. Backend
 cd backend
-cp .env.example .env            # set DATABASE_URL (API role), DIRECT_DATABASE_URL (owner), JWT_SECRET
+cp .env.example .env            # set DATABASE_URL (API role), DIRECT_DATABASE_URL (owner), JWT_SECRET, REDIS_URL
 npm install                     # also runs `prisma generate`
 npm run db:deploy               # apply all migrations (as the owner)
 npm run db:roles                # create ledgerline_api with exactly its privileges
@@ -305,7 +312,8 @@ npm run dev                     # http://localhost:5173
 ```
 
 Open **http://localhost:5173** (use `localhost`, not `127.0.0.1` – CORS allows the exact origin only).
-Check the database at any time: `cd backend && npm run verify:db`.
+Check the database at any time: `cd backend && npm run verify:db`. Check readiness: `curl http://localhost:4000/api/health/ready`.
+After a reboot, start Redis again with `docker start ledgerline-redis` (Docker Desktop must be running).
 
 ## 14. Environment variables
 
@@ -317,7 +325,8 @@ invalid values.
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `DATABASE_URL` | ✅ | – | PostgreSQL connection string (use a dedicated, non-superuser role) |
+| `DATABASE_URL` | ✅ | – | The limited API role `ledgerline_api` (rows only) |
+| `DIRECT_DATABASE_URL` | for migrations | – | The table owner – used only by migrations and `npm run db:roles`, never by the server |
 | `JWT_SECRET` | ✅ | – | ≥ 32 random characters: `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"` |
 | `NODE_ENV` | | `production` | `development` shows debug details in 500 errors; production hides them and marks cookies `Secure` |
 | `PORT` | | `4000` | API port |
@@ -327,6 +336,9 @@ invalid values.
 | `RATE_LIMIT_MAX` | | `600` | Requests per IP per 15 minutes |
 | `AUTH_LOGIN_FAILURE_LIMIT` | | `10` | Failed logins per IP per 15 minutes |
 | `AUTH_REGISTER_LIMIT` | | `10` | Registrations per IP per hour |
+| `AUTH_ACCOUNT_FAILURE_LIMIT` | | `10` | Failed logins (and wrong current passwords) per account per 15 minutes, from any IP |
+| `REDIS_URL` | ✅ in production | – | Rate-limit counters, e.g. `redis://127.0.0.1:6379/0`. Production refuses to start without it; development falls back to memory |
+| `REDIS_KEY_PREFIX` | | `ll:<NODE_ENV>:` | Prefix for every Redis key, so environments never share counters |
 | `TRUST_PROXY` | | `0` | Number of proxies in front of the API (Render = 1; Vercel rewrite + Render = 2) |
 | `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` | for seeding | – | Admin created by `npm run db:seed` |
 | `SEED_AUDITOR_EMAIL` / `SEED_AUDITOR_PASSWORD` | for seeding | – | Auditor created by `npm run db:seed` |
@@ -337,13 +349,14 @@ invalid values.
 |---|---|---|
 | `VITE_API_BASE_URL` | ✅ | API base URL, e.g. `http://localhost:4000/api`. Public – bundled into the JavaScript, never put secrets here. |
 
-**Tests** use `backend/.env.test` (copy `backend/.env.test.example`), which must point to a separate database named `ledgerline_test`.
+**Tests** use `backend/.env.test` (copy `backend/.env.test.example`), which must point to a separate database named `ledgerline_test`
+and to the local Redis, database 1 (`redis://127.0.0.1:6379/1`).
 
 ## 15. Testing
 
 | Command (folder) | What it covers | Result |
 |---|---|---|
-| `npm test` (backend) | Jest + Supertest: auth, authorization, accounts, transactions, **financial integrity**, **idempotency**, **concurrency**, ledger tampering, security audit, rate limits, **first-admin bootstrap**, change password, database roles | 324 tests |
+| `npm test` (backend) | Jest + Supertest: auth, authorization, accounts, transactions, **financial integrity**, **idempotency**, **concurrency**, ledger tampering, security audit, rate limits **in Redis** (incl. Redis down), readiness, **first-admin bootstrap**, change password, database roles | 344 tests |
 | `npm test` (frontend) | amount parsing (no floating point), validation, error messages, idempotency keys | 13 tests |
 | `npm run test:e2e` (frontend) | Playwright in Chrome: registration, login, protected routes, roles, money forms, history, error handling, lost-response retry, change password | 24 tests |
 | `npm run smoke` (backend) | end-to-end API check against your running dev server | 56 checks |
@@ -357,16 +370,18 @@ cd backend && cp .env.test.example .env.test   # fill in password + test-only se
 npm test                                       # prepares ledgerline_test automatically
 ```
 
-The test tools refuse to run against any database that is not named `ledgerline_test`. Browser tests start their own servers
+The test tools refuse to run against any database that is not named `ledgerline_test`, and against any Redis but a local one
+(database 1 or higher, test keys only – each test file gets its own key prefix, and old test keys are removed before each run). Browser tests start their own servers
 (:4001 / :5174) and use your installed Chrome.
 
 ## 16. Deployment
 
 **Vercel** (frontend) · **Render** (backend) · **Neon** (managed PostgreSQL). Step-by-step guide: **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**.
 
-**Live demo:** _URL added after the deployment has been verified._
+**Live demo:** <https://ledger-line-umber.vercel.app> (verified 2026-11-12: 25/25 live checks, 14/14 database checks – see docs/DEPLOYMENT.md).
 
-- `render.yaml` – Render Blueprint (build `npm ci --include=dev`, start `npm run db:deploy && npm start`, health check `/api/health`).
+- `render.yaml` – Render Blueprint (build `npm ci --include=dev`, start `npm start` – migrations run from your computer, health check
+  `/api/health/ready`, `REDIS_URL` from a Render Key Value instance).
 - `frontend/vercel.json` – rewrites `/api/*` to the backend so the browser only talks to one site and the `SameSite=Strict` session cookie
   keeps working (`*.vercel.app` and `*.onrender.com` are different sites), SPA fallback, and security headers (CSP, HSTS, …).
 - `npm run db:prepare:production` – migrations, SYSTEM account, demo data and verification on the production database
@@ -422,14 +437,15 @@ entry. Every user can change their password on the **Profile** page (other sessi
 ## 19. Limitations and future enhancements
 
 **Known limitations** (details in [THREATS.md](THREATS.md)):
-- The API runs as a limited database role (`ledgerline_api`); **production is switched over only after the steps in docs/DEPLOYMENT.md**.
-- Rate limits are per IP and kept in memory (not shared between server instances); no account lockout, CAPTCHA or MFA.
+- Whoever holds the database owner password can still disable the ledger triggers (the API itself runs as the limited `ledgerline_api`).
+- The per-account lockout can be triggered by anyone who knows an email address (10 wrong passwords lock it for up to 15 minutes);
+  no CAPTCHA or MFA. If Redis is down, nobody can sign in until it is back (by design – fail closed).
 - A stolen session token works for up to 1 hour unless the user logs out; logout signs out all devices.
 - Idempotency keys expire after 24 hours and are not cleaned up by a scheduled job.
 - All deposits and withdrawals serialize on the single SYSTEM account row (throughput, not safety).
 - INR only; per-transaction limits, no daily limits; no independent penetration test.
 
-**Future enhancements:** Redis-backed rate limiting · MFA and per-device
+**Future enhancements:** MFA and per-device
 sessions · scheduled cleanup of expired idempotency keys · daily limits and scheduled transfers · CSV/PDF statements ·
 multi-currency with exchange rates · CI pipeline running all test suites on every push.
 

@@ -326,9 +326,11 @@ describe('Day 3 – duplicate transfers can never move money twice', () => {
     // like the server restarting between the original request and the retry.
     let freshApp;
     let freshPrisma;
+    let freshRedis;
     jest.isolateModules(() => {
       freshApp = require('../../src/app');
       freshPrisma = require('../../src/config/prisma');
+      freshRedis = require('../../src/config/redis');
     });
     try {
       const retry = await request(freshApp).post('/api/transactions/transfer').set(holder.auth).set('Idempotency-Key', key)
@@ -337,7 +339,7 @@ describe('Day 3 – duplicate transfers can never move money twice', () => {
       expect(retry.headers['idempotent-replayed']).toBe('true');
       expect(retry.body.transaction.id).toBe(original.body.transaction.id);
     } finally {
-      await freshPrisma.$disconnect();
+      await Promise.all([freshPrisma.$disconnect(), freshRedis.disconnect()]);
     }
     expect(await transfersBetween(from, to)).toBe(1);
   });

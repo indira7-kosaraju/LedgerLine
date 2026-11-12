@@ -8,16 +8,7 @@ const results = [];
 const check = (name, ok, detail = '') => results.push({ name, ok, detail });
 const one = async (query) => (await query)[0];
 
-const REQUIRED_TRIGGERS = [
-  'ledger_entries_append_only', 'ledger_entries_no_truncate', 'ledger_entries_check_chain',
-  'audit_logs_append_only', 'audit_logs_no_truncate',
-  'transactions_append_only', 'transactions_no_truncate', 'transactions_must_balance',
-  'accounts_balance_matches_ledger',
-];
-const REQUIRED_CONSTRAINTS = [
-  'accounts_customer_balance_non_negative', 'accounts_owner_matches_type', 'transactions_amount_positive',
-  'ledger_entries_amount_positive', 'transactions_different_accounts',
-];
+const { REQUIRED_TRIGGERS, REQUIRED_CONSTRAINTS } = require('../src/config/schemaRequirements');
 
 async function main() {
   const db = await one(prisma.$queryRaw`SELECT current_database() AS name`);

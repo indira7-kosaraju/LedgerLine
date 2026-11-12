@@ -34,6 +34,20 @@ const envSchema = z.object({
   // Raised only in .env.test so automated tests can create many users.
   AUTH_LOGIN_FAILURE_LIMIT: z.coerce.number().int().min(1).max(100000).default(10),
   AUTH_REGISTER_LIMIT: z.coerce.number().int().min(1).max(100000).default(10),
+  // Failed logins (and wrong current passwords) per ACCOUNT (email) per 15 minutes, from any IP.
+  AUTH_ACCOUNT_FAILURE_LIMIT: z.coerce.number().int().min(1).max(100000).default(10),
+  // Shared rate-limit counters (they survive restarts and are shared by all server instances).
+  // Required by the server in production (src/server.js); without it, development falls back to memory.
+  // Not required HERE, so command-line tools such as admin:bootstrap keep working without Redis.
+  REDIS_URL: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z.string().regex(/^rediss?:\/\//, 'REDIS_URL must be a redis:// or rediss:// URL').optional()
+  ),
+  // Prefix for every Redis key, so environments can never share counters. Default: "ll:<NODE_ENV>:".
+  REDIS_KEY_PREFIX: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z.string().regex(/^[a-z0-9:_-]{1,60}$/, 'REDIS_KEY_PREFIX may only contain a–z, 0–9, ":", "_" and "-"').optional()
+  ),
 });
 
 const parsed = envSchema.safeParse(process.env);

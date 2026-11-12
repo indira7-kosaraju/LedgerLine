@@ -1,7 +1,6 @@
 const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
-const rateLimit = require('express-rate-limit');
 const cookieParser = require('cookie-parser');
 
 const env = require('./config/env');
@@ -15,6 +14,7 @@ const ledgerRoutes = require('./routes/ledger.routes');
 const notFound = require('./middleware/notFound');
 const errorHandler = require('./middleware/errorHandler');
 const csrfProtection = require('./middleware/csrfProtection');
+const { apiLimiter } = require('./middleware/rateLimiters');
 
 // app.js builds the Express app but does not start listening.
 // Keeping it separate from server.js lets tests import the app directly.
@@ -56,20 +56,14 @@ app.use(express.json({ limit: '10kb' }));
 app.use(cookieParser());
 app.use(csrfProtection);
 
-// Global rate limit per IP per 15 minutes (RATE_LIMIT_MAX, default 600 – a dashboard
-// page makes several API calls). Login and register have their own stricter limits.
-app.use(
-  '/api',
-  rateLimit({
-    windowMs: 15 * 60 * 1000,
-    limit: env.RATE_LIMIT_MAX,
-    standardHeaders: 'draft-8',
-    legacyHeaders: false,
-    message: { error: { code: 'RATE_LIMITED', message: 'Too many requests, please try again later' } },
-  })
-);
-
+// Health checks come BEFORE the rate limit: Render polls them constantly, and a limited health check would
+// make a healthy server look broken. (Readiness results are cached briefly – see routes/health.routes.js.)
 app.use('/api/health', healthRoutes);
+
+// Global rate limit per IP per 15 minutes (RATE_LIMIT_MAX, default 600 – a dashboard page makes several API
+// calls), counters in Redis (middleware/rateLimiters.js). Login and register have their own stricter limits.
+app.use('/api', apiLimiter);
+
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/audit-logs', auditLogRoutes);

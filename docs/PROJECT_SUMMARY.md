@@ -35,14 +35,17 @@ LedgerLine is a learning project that implements these guarantees end to end and
 - **First-admin bootstrap:** `npm run admin:bootstrap` creates the first admin only if no active admin exists (hidden password
   prompt, database lock, audited), and can switch off the public demo admin. Every user can change their own password.
 - **Audit log** for logins, account changes, money movements and refusals.
-- **Rate limiting** for login, registration and the whole API, plus `TRUST_PROXY` support so limits use the real client IP behind
-  hosting proxies.
+- **Rate limiting in Redis** for login, registration and the whole API – shared by all server instances and kept across restarts –
+  plus a per-account login lockout. If Redis is down, sign-in fails closed (503) and the rest of the API keeps working. `TRUST_PROXY`
+  makes the limits use the real client IP behind hosting proxies.
+- **Liveness and readiness checks:** `/api/health/live`, and `/api/health/ready` (database, Redis, ledger protections, limited
+  database role), used as Render's health check so a broken deploy never goes live.
 - **Tests:**
-  - 324 backend tests (Jest + Supertest) on a separate test database
+  - 344 backend tests (Jest + Supertest) on a separate test database and a local Redis
   - 24 browser tests (Playwright)
   - 13 frontend unit tests
   - a 56-check smoke test
-  - a 13-check database verifier
+  - a 14-check database verifier
   - a 25-check deployment verifier
 - **Documentation:** [README](../README.md), [API reference](API.md), [threat model](../THREATS.md), [security audit](SECURITY_AUDIT.md),
   [deployment guide](DEPLOYMENT.md), and an [AI prompt log](../PROMPTS.md) with 22 entries.
@@ -134,7 +137,8 @@ The lesson: AI output has to be proven by tests and by the real running system, 
 - The public demo admin is disabled; the real first admin was created with `admin:bootstrap`.
 
 **Not verified yet:**
-- **A readiness endpoint** – planned for step 3 (Redis rate limiting and readiness checks).
+- **Step 3 on the live site:** Redis rate limiting and the readiness endpoint are built and tested locally (344 backend tests); they are
+  not deployed yet (a Render Key Value instance and `REDIS_URL` are needed first).
 - **A manual browser walkthrough of the deployed app** (the automated checks above cover the API behind it):
   - login
   - deposit, withdrawal and transfer
@@ -142,7 +146,7 @@ The lesson: AI output has to be proven by tests and by the real running system, 
   - idempotency
   - the concurrency race
 - **Accepted limitations** (see THREATS.md):
-  - Rate limits are kept in memory, per IP. There is no per-account lockout and no MFA.
+  - Anyone who knows an email address can lock that account for up to 15 minutes; a Redis outage blocks sign-in; no CAPTCHA or MFA.
   - The API runs as a limited database role, locally and on the live site. Whoever holds the owner password (kept only on the
     operator's computer) can still disable the ledger triggers.
   - Render's free plan sleeps when idle, so the first request after a pause is slow.

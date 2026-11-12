@@ -44,6 +44,7 @@ or incomplete, how that was found, and how it was fixed.
 | 22 | 2026-11-08 | Day 3 · Deployment | deployment, **security** (cookies, proxies, secrets) | `chore: finalize deployment configuration` |
 | 23 | 2026-11-11 | Update · Step 1 | **security**, authentication, admin bootstrap | `feat: add secure first-admin bootstrap and password change` |
 | 24 | 2026-11-11 | Update · Step 2 | **security**, database roles, ledger integrity | `security: run the API as a limited database role` |
+| 25 | 2026-11-12 | Update · Step 3 | **security**, rate limiting, readiness | `feat: add Redis rate limiting, account lockout and readiness checks` |
 
 ---
 
@@ -801,6 +802,62 @@ privileges; with the limit removed it fails with "The timeout for this transacti
 
 ---
 
+## Entry 25 – Redis rate limiting, per-account lockout and readiness checks (step 3)
+
+**Date:** 2026-11-12
+
+**Prompt given to AI:** "ready" (start step 3: inspect first and explain the plan) – then "approve step 3, option A, lockout yes"
+(option A: sign-in fails closed and the rest of the API fails open when Redis is down; plus a per-account lockout).
+
+**What AI generated:** `backend/src/config/redis.js` (connection, timeouts), `backend/src/middleware/rateLimiters.js` (all limiters
+with a Redis store, fail-closed wrapper, account key = SHA-256 of the normalised email), `backend/src/services/readiness.service.js`
+and `GET /api/health/live` · `/api/health/ready`, `backend/src/config/schemaRequirements.js` (one trigger/constraint list shared with
+`verify-db.js`), Redis required at production startup in `server.js`, new env variables (`REDIS_URL`, `REDIS_KEY_PREFIX`,
+`AUTH_ACCOUNT_FAILURE_LIMIT`), Jest setup for a local Redis (per-file key prefix, cleanup), 4 new test files (20 tests), `render.yaml`
+(health check `/api/health/ready`, `REDIS_URL`) and documentation. Packages pinned exactly: `rate-limit-redis@6.0.2`, `redis@6.3.0`
+(6.3.1 was skipped because it was released only 14 days earlier).
+
+**What was incorrect or incomplete:**
+1. **Found in the inspection:** counters lived in server memory – every restart or deploy gave an attacker 10 fresh guesses, and a
+   second instance would have had its own counters. There was no per-account limit and no readiness check.
+2. **A false statement by the AI (step 2):** `render.yaml` said "If a migration is missing, the readiness check will report it" – no
+   readiness check existed.
+3. **The AI's first Redis client waited up to 2 s for a connection on every command.** With Redis down, each request waited once per
+   limiter: a login took 5.9 s, and every API call would have become slower during an outage.
+4. **The AI's first shutdown used `destroy()`,** which cancelled commands still in flight (the counter update after a response) and made
+   a test fail with "Disconnects client"; a client still connecting was not closed at all, so Jest never exited.
+5. **Counters were shared between test files** (all used the same prefix and IP), so `rateLimit.test.js` got 429 on its first request.
+6. **Existing tests that load a second copy of the app** (`security.test.js`, `idempotency.test.js`) left that copy's Redis connection
+   open – the full suite passed but Jest never exited.
+7. **The AI's process mistakes while testing:** it used `timeout`, which does not exist on macOS, so one batch of tests silently did not
+   run at all; it wrote a stray file to `/tmp`; and it put a `git diff` command into a test script, against the rule that the AI never
+   runs Git. The run was stopped before that line executed, and the script was rewritten without it.
+
+**How the issue was identified:** (1)–(2) reading the code and `render.yaml`; (3) a timing assertion in `redisDown.test.js`
+(5878 ms); (4)–(6) the test output, then listing the process's open sockets after every test file; (7) empty output and reviewing
+the script.
+
+**How it was corrected:** (1) Redis store for all limiters, a per-account limiter, `/api/health/live` and `/api/health/ready`; (2) the
+comment now describes the real readiness check; (3) commands wait only until the first connection attempt succeeds *or fails* – after
+that they fail at once; (4) graceful `close()`, `destroy()` only for a client that is still reconnecting, after waiting for the first
+attempt; (5) a random key prefix per test file (`ll:test:<random>:`), old test keys deleted before each run; (6) those tests now close
+their copy's Redis connection; (7) `perl -e 'alarm …'` as the time limit, the stray file deleted, no Git in any script.
+
+**How it was verified:** backend **344/344** (19 suites, Jest exits on its own), Playwright 24/24 (its backend uses the test Redis),
+frontend unit 13/13, frontend lint clean, `verify-db` 14/14 locally. Mutation tests – each made tests fail: login limits failing open
+(1), the account limiter removed (5), counters in memory instead of Redis (3), emails not normalised (1), waiting for a full connection
+on every command (2), health routes rate limited again (3), the dbRole check disabled (1), production starting without Redis (1),
+readiness revealing error text (5). Started by hand in production mode: without `REDIS_URL` → exit 1; Redis unreachable → exit 1
+after 10 s, the password in the URL not printed; with Redis → readiness 200, SIGTERM → exit 0. Captured from a local server with Redis
+stopped: readiness 503 `redis: failed`, login 503 `SERVICE_UNAVAILABLE`. **Not done:** anything on Render (Key Value instance,
+`REDIS_URL`, deploy) – waiting for my approval.
+
+**Related commit:** `feat: add Redis rate limiting, account lockout and readiness checks`
+
+**My review notes:** _(to be completed by me)_
+
+---
+
 ## Commit references
 
 The AI cannot know commit hashes and did not run Git. Fill in the hash column with:
@@ -835,3 +892,4 @@ git log --oneline --reverse
 | 22 | `chore: finalize deployment configuration` | |
 | 23 | `feat: add secure first-admin bootstrap and password change` | |
 | 24 | `security: run the API as a limited database role` | |
+| 25 | `feat: add Redis rate limiting, account lockout and readiness checks` | |

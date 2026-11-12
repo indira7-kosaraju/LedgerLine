@@ -13,9 +13,11 @@ services:
     buildCommand: npm ci --include=dev
     # The server does NOT migrate: it only has the limited API role, never the table owner's
     # credentials. Migrations run from your computer first: npm run db:prepare:production
-    # (docs/DEPLOYMENT.md). If a migration is missing, the readiness check will report it.
+    # (docs/DEPLOYMENT.md). If a migration is missing, /api/health/ready reports "schema": "failed".
     startCommand: npm start
-    healthCheckPath: /api/health
+    # Readiness: database, Redis, ledger triggers/constraints and the limited database role must all be OK,
+    # otherwise a new deploy never goes live and Render keeps the previous version running.
+    healthCheckPath: /api/health/ready
     autoDeploy: true
     envVars:
       - key: NODE_VERSION
@@ -31,7 +33,7 @@ services:
         generateValue: true
       - key: JWT_EXPIRES_IN
         value: 1h
-      - key: CORS_ORIGIN # the Vercel URL, e.g. https://ledgerline.vercel.app – entered in the dashboard
+      - key: CORS_ORIGIN # the Vercel URL (this deployment: https://ledger-line-umber.vercel.app) – entered in the dashboard
         sync: false
       # Requests pass through 2 proxies: Vercel (rewrite) and Render's load balancer.
       - key: TRUST_PROXY
@@ -40,3 +42,12 @@ services:
         value: "12"
       - key: RATE_LIMIT_MAX
         value: "600"
+      # Rate-limit counters (required in production – without it the server refuses to start).
+      # The INTERNAL URL of a Render Key Value instance in the same region, entered in the dashboard:
+      # redis://red-…:6379 (reachable only from Render services, not from the internet).
+      - key: REDIS_URL
+        sync: false
+      - key: REDIS_KEY_PREFIX
+        value: "ll:prod:"
+      - key: AUTH_ACCOUNT_FAILURE_LIMIT # failed logins per account (email) per 15 minutes
+        value: "10"

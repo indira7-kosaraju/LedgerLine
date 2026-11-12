@@ -28,14 +28,19 @@ function appWith(envOverrides) {
   }
   let isolatedApp;
   let isolatedPrisma;
+  let isolatedRedis;
   jest.isolateModules(() => {
     isolatedApp = require('../../src/app');
     isolatedPrisma = require('../../src/config/prisma');
+    isolatedRedis = require('../../src/config/redis'); // its own Redis connection – closed with the Prisma one
   });
   for (const [k, v] of Object.entries(saved)) {
     if (v === undefined) delete process.env[k];
     else process.env[k] = v;
   }
+  // Closing the copy's Prisma client also closes its Redis client (so Jest can exit).
+  const disconnect = isolatedPrisma.$disconnect.bind(isolatedPrisma);
+  isolatedPrisma.$disconnect = () => Promise.all([disconnect(), isolatedRedis.disconnect()]);
   return { isolatedApp, isolatedPrisma };
 }
 
