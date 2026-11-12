@@ -44,7 +44,7 @@ LedgerLine is a learning project that implements these guarantees end to end and
 - **Liveness and readiness checks:** `/api/health/live`, and `/api/health/ready` (database, Redis, ledger protections, limited
   database role), used as Render's health check so a broken deploy never goes live.
 - **Tests:**
-  - 377 backend tests (Jest + Supertest) on a separate test database and a local Redis
+  - 385 backend tests (Jest + Supertest) on a separate test database and a local Redis
   - 27 browser tests (Playwright)
   - 15 frontend unit tests
   - a 61-check smoke test
@@ -142,8 +142,11 @@ The lesson: AI output has to be proven by tests and by the real running system, 
 **Not verified yet:**
 - **Step 3 is live and verified (2026-11-12):** readiness reports database, Redis, ledger protections and the limited role as `ok`;
   25/25 live checks and 14/14 database checks passed. The login lockout itself was deliberately not triggered on production.
-- **Step 4 (onboarding) on the live site:** built and tested locally (377 backend tests, 27 browser tests); not deployed yet – its
-  database migration must run first.
+- **Step 4 (onboarding) is live (2026-11-12):** migration applied, readiness all `ok`, 15/15 database checks; the frontend serves the
+  onboarding page with the demo-data warning. The 27 live checks have not been run against it yet.
+- **Accepted:** 7 demo transactions were duplicated on production by a re-run of the demo seed (its idempotency keys had expired).
+  Simulated money on demo accounts only; kept as they are (append-only ledger). The seed is fixed and production demo seeding is now
+  opt-in (see docs/DEPLOYMENT.md).
 - **A manual browser walkthrough of the deployed app** (the automated checks above cover the API behind it):
   - login
   - deposit, withdrawal and transfer

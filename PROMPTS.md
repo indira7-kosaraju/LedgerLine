@@ -46,6 +46,7 @@ or incomplete, how that was found, and how it was fixed.
 | 24 | 2026-11-11 | Update · Step 2 | **security**, database roles, ledger integrity | `security: run the API as a limited database role` |
 | 25 | 2026-11-12 | Update · Step 3 | **security**, rate limiting, readiness | `feat: add Redis rate limiting, account lockout and readiness checks` |
 | 26 | 2026-11-12 | Update · Step 4 | onboarding, **security**, database integrity | `feat: add customer onboarding with automatic approval` |
+| 27 | 2026-11-12 | Fix · Step 4 | demo seed, idempotency, production safety | `fix: create demo transactions only once and make production demo seeding opt-in` |
 
 ---
 
@@ -896,6 +897,11 @@ onboarding in `verify-deployment.js` (27 checks) and the smoke test (61); docume
    cannot onboard and gets a 500 when opening an account (the new trigger). Documented in docs/DEPLOYMENT.md; the window must be short.
 5. **The AI's own test mistake:** "You must be at least 18 years old" matched both the page subtitle and the error (Playwright strict
    mode) – the test now matches the error text exactly.
+6. **Found after the production migration (S1):** the AI had told me the demo seed would "replay, not duplicate" its transactions. That
+   was wrong after 24 hours: idempotency keys expire, so `db:prepare:production` ran the 7 demo transactions **again** on production
+   (simulated money, demo accounts only; one formerly refused withdrawal now succeeded). The rehearsal missed it because local keys
+   were recent. Found by comparing production with the pre-S1 snapshot (transactions 27 → 34). I accepted the rows (not deleted, not
+   reversed) – details in docs/DEPLOYMENT.md, "Accepted: 7 duplicated demo transactions". A seed fix is planned.
 
 **How the issue was identified:** (1) reading `auth.service.js` and the routes; (2)–(3), (5) test runs and mutation tests; (4) thinking
 through the deploy order.
@@ -909,9 +915,54 @@ OK, smoke test 61/61, `verify-db` 15/15 on the development database after the mi
 local http), the 2 new onboarding checks passed. Mutation tests – each made a test fail: guard removed from opening accounts (1) or
 transfers (1), guard letting everyone through (4), extra fields allowed (1), no minimum age (1), any terms version (1), personal data
 in the audit log (1), the account trigger disabled on the test database (1). Real API responses captured for docs/API.md.
-**Not done:** the production migration and deploy – waiting for my approval.
+
+**Production (2026-11-12, each step approved separately):** a safety review first – read-only checks (4 earlier migrations, no name
+conflicts) and a snapshot of production; a rehearsal on a copy of the development database (all data fingerprints identical, ~1 s); a
+deliberately broken copy proved that a failed migration leaves nothing behind (`migrate resolve --rolled-back` then re-applies cleanly);
+an emergency rollback script tested on a copy. I created the Neon branch `pre-step4` as a restore point. S1 (run by me):
+`db:prepare:production` – migration applied, `customer_profiles` privileges set, `verify-db` 15/15. Compared with the snapshot, all
+existing users, transactions, ledger entries and audit records were identical – but 7 demo transactions were added (mistake 6). S2:
+commit `03a450d` pushed by me and live. S3 (read-only): `/api/onboarding` 401 instead of 404, readiness all `ok`, 15/15, only
+`ledgerline_api` connections, the live bundle contains the onboarding page and the demo warning. **Not done yet:** the 27 live checks.
 
 **Related commit:** `feat: add customer onboarding with automatic approval`
+
+**My review notes:** _(to be completed by me)_
+
+---
+
+## Entry 27 – Demo seed: create demo transactions only once; production demo seeding opt-in
+
+**Date:** 2026-11-12
+
+**Prompt given to AI:** "approve seed fix" – prevent duplicate demo transactions even when idempotency keys expire, make production
+demo seeding opt-in with `--with-demo`, regression tests for expired and missing keys, document the 7 accepted transactions.
+
+**What AI generated:** `prisma/seed-demo.js` – demo transactions only if neither demo holder has any transaction yet; the seed is now a
+function (`seedDemo`) that tests can call with their own demo users. `scripts/prepare-production-db.js` – an explicit step list
+(`productionSteps`), the demo seed only with `--with-demo`, unknown options refused. `tests/integration/seedDemo.test.js` (8 tests).
+Documentation: docs/DEPLOYMENT.md (the 7 transactions, the fix, `--with-demo` in the setup steps), README, THREATS (accepted risk 4),
+PROJECT_SUMMARY.
+
+**What was incorrect or incomplete:**
+1. **The original seed (and the AI's claim about it):** "a re-run replays instead of duplicating" relied on idempotency keys, which
+   expire after 24 hours – on production the re-run executed all 7 demo operations again (Entry 26, mistake 6).
+2. **The production script ran the demo seed every time,** so preparing the database for a migration also touched demo data.
+3. **While writing the tests, the AI first wrote a "visitor" test that only repeated the deleted-keys case** with a confusing
+   comment; it was replaced by a real visitor scenario (a demo holder who made a deposit through the API, no seed ever ran).
+
+**How the issue was identified:** (1)–(2) the post-S1 snapshot comparison on production; (3) reviewing the test before running it.
+
+**How it was corrected:** (1) the "no transactions yet" rule – independent of keys; (2) `--with-demo`; (3) the rewritten test.
+
+**How it was verified:** `seedDemo.test.js` 8/8; with the old behaviour restored (guard removed) the tests for **expired keys**,
+deleted keys, the visitor and the immediate re-run fail (4); the demo seed always in the production steps → 1 failure; unknown options
+ignored → 1 failure. The real `npm run db:seed:demo` on the development database printed "skipped" and left 158 transactions at 158.
+Backend 385/385 (21 suites), `verify-db` 15/15 locally. The typo check was tried only with `--with-demos`, which stops before reading
+`.env.production` – the production script was **not** run. Frontend not affected (not re-run). **Nothing changed on Neon or Render**;
+the scripts run only from my computer, so this needs a commit but no deploy.
+
+**Related commit:** `fix: create demo transactions only once and make production demo seeding opt-in`
 
 **My review notes:** _(to be completed by me)_
 
@@ -953,3 +1004,4 @@ git log --oneline --reverse
 | 24 | `security: run the API as a limited database role` | |
 | 25 | `feat: add Redis rate limiting, account lockout and readiness checks` | |
 | 26 | `feat: add customer onboarding with automatic approval` | |
+| 27 | `fix: create demo transactions only once and make production demo seeding opt-in` | |

@@ -23,7 +23,7 @@ HttpOnly session cookie, CSRF protection and CORS all work unchanged.
 |---|---|
 | `render.yaml` | Render Blueprint: build `npm ci --include=dev`, start `npm start`, health check `/api/health/ready`, env vars |
 | `frontend/vercel.json` | `/api/*` rewrite to Render, SPA fallback, security headers (CSP, HSTS, X-Frame-Options, …) |
-| `backend/scripts/prepare-production-db.js` | `npm run db:prepare:production` – migrations, seeds, verification on the production DB |
+| `backend/scripts/prepare-production-db.js` | `npm run db:prepare:production` – migrations, roles, system seed, verification on the production DB (demo data only with `-- --with-demo`) |
 | `backend/scripts/verify-deployment.js` | `npm run verify:deployment -- <url>` – 25 end-to-end checks against the live site |
 
 ---
@@ -47,10 +47,12 @@ HttpOnly session cookie, CSRF protection and CORS all work unchanged.
 6. Prepare the database:
    ```bash
    cd ~/Documents/snovasys/LedgerLine/backend
-   npm run db:prepare:production
+   npm run db:prepare:production -- --with-demo     # first time: also creates the demo users and demo transactions
    ```
-   Expected: 4 migrations applied, `ledgerline_api has exactly the planned privileges`, `SYSTEM account ready`, `Skipping ADMIN/AUDITOR` (private accounts are not copied to production),
-   7 demo steps (no demo admin), and `✅ Database state verified: 14 checks passed`.
+   Expected: all migrations applied, `ledgerline_api has exactly the planned privileges`, `SYSTEM account ready`, `Skipping ADMIN/AUDITOR`
+   (private accounts are not copied to production), 7 demo steps (no demo admin), and `✅ Database state verified: 15 checks passed`.
+   Later runs (e.g. for a new migration) without `--with-demo` leave demo data alone; even with it, demo transactions are created only
+   once (skipped as soon as a demo holder has any transaction).
 
 7. Create your **real first admin** (and switch off the public demo admin if an older deployment created one):
    ```bash
@@ -129,8 +131,9 @@ Then try it in a browser with the demo credentials (README → Demo credentials)
   to the `onrender.com` URL could fake one `X-Forwarded-For` entry and so get around the per-IP rate limit (accepted risk, see THREATS.md).
 - **Database roles:** the API uses `ledgerline_api` (rows only; see "Separate database roles" below). Keep the owner connection
   (`DIRECT_DATABASE_URL`) only in `backend/.env.production` on your computer – never on Render.
-- **Demo data is public:** anyone can log in with the demo credentials. Re-run `npm run db:prepare:production` at any time – it is safe to
-  repeat (the demo seed replays instead of duplicating).
+- **Demo data is public:** anyone can log in with the demo credentials. `npm run db:prepare:production` can be re-run at any time; it
+  only touches demo data with `--with-demo`, and then creates demo transactions only if the demo holders have none yet (fixed after the
+  duplicate on 2026-11-12 – see "Accepted: 7 duplicated demo transactions").
 
 ## Rate limits and readiness (Redis)
 
@@ -208,8 +211,8 @@ IP service. The live run permanently added one more `deploy-check-…` user, 3 a
 
 The server never migrates (it only has the limited role). For a release that contains a migration:
 
-1. From your computer: `cd backend && npm run db:prepare:production` – applies the migration as the owner, re-runs `db:roles` (new tables
-   get their privileges; an unlisted table stops the script), seeds and runs `verify-db`.
+1. From your computer: `cd backend && npm run db:prepare:production` (no `--with-demo`) – applies the migration as the owner, re-runs
+   `db:roles` (new tables get their privileges; an unlisted table stops the script), the system seed, and `verify-db`.
 2. Then push. Until step 1 has run, the new version's readiness check reports `schema: failed` (its triggers are missing), so Render
    does not switch to it and the previous version keeps serving.
 
@@ -220,4 +223,58 @@ After it: `verify-db` has 15 checks and `verify-deployment` 27.
 **Short window between migration and deploy:** the previous version keeps serving until the new one is live. During that time a user
 who registers *after* the migration starts at `PENDING_PROFILE`, the old frontend has no onboarding page, and opening an account fails
 with a generic 500 (the new trigger refuses it). Existing users are not affected. Keep the window short: migrate, then push at once.
+
+## Step 4 migration on production (S1, 2026-11-12)
+
+Before S1: a Neon branch `pre-step4` was created from production as a restore point, the migration was rehearsed on a copy of the
+development database (all data fingerprints identical before/after; a deliberately broken copy left nothing behind), and a snapshot of
+production was saved (counts and fingerprints of users, accounts, transactions, ledger entries, audit records, idempotency keys).
+
+`npm run db:prepare:production` then applied `20261112120000_customer_onboarding`, set the `customer_profiles` privileges
+(`SELECT, INSERT`) and passed `verify-db` 15/15. Compared with the snapshot:
+
+| Data | Result |
+|---|---|
+| Users (8 – email, role, active flag, password hash, session version) | identical; all `APPROVED` |
+| Accounts (13) | same accounts; balances changed only on the demo accounts below |
+| The 27 transactions, 54 ledger entries and 105 audit records that existed before | identical |
+| Idempotency keys | 33 → 33 |
+| New objects | both triggers enabled, 3 CHECK constraints, `customer_profiles` (owner `neondb_owner`, 0 rows) |
+
+### Accepted: 7 duplicated demo transactions (simulated money)
+
+S1 also re-ran the demo seed, which was assumed to "replay instead of duplicating". That is only true for 24 hours: idempotency keys
+expire after 24 hours, the demo seed had first run on production earlier than that, so its fixed keys were treated as expired and
+the 7 demo operations ran **again** (stored times 12:16:08–12:16:22 UTC):
+
+| # | Type | Amount | Description | Initiated by | From → to |
+|---|---|---|---|---|---|
+| 1 | Deposit | ₹5,000 | Salary | asha.holder@example.com | SYSTEM → Asha main |
+| 2 | Deposit | ₹2,000 | Bonus | asha.holder@example.com | SYSTEM → Asha main |
+| 3 | Withdrawal | ₹1,000 | Cash | asha.holder@example.com | Asha main → SYSTEM |
+| 4 | Transfer | ₹500 | Dinner | asha.holder@example.com | Asha main → Ravi |
+| 5 | Transfer | ₹1,500 | Savings | asha.holder@example.com | Asha main → Asha savings |
+| 6 | Deposit | ₹1,200 | Opening deposit | ravi.holder@example.com | SYSTEM → Ravi |
+| 7 | Withdrawal | ₹3,000 | More than the balance | ravi.holder@example.com | Ravi → SYSTEM |
+
+No. 7 had been **refused** the first time (insufficient funds, by design – a demo of a refused attempt); this time Ravi's balance was
+high enough because of no. 6 and no. 4, so it succeeded. Result: 34 transactions, 68 ledger entries; Asha ₹8,000 + ₹3,000, Ravi ₹400,
+SYSTEM −₹21,770; all balances still sum to ₹0 and every ledger check passes. Only the two demo holders and the SYSTEM account are
+affected – no real user, the bootstrapped admin, or any account outside the demo.
+
+**Decision (2026-11-12):** accepted as they are. The ledger is append-only, so they are **not deleted**, and they are **not reversed**
+(that would add more records).
+
+**Fix (2026-11-12, local scripts only – nothing to deploy on Render):**
+- `prisma/seed-demo.js` creates the demo transactions only if **neither demo holder has any transaction yet** – it no longer relies
+  on idempotency keys, which expire after 24 hours. A re-run prints `Demo transactions: skipped – the demo holders already have N
+  transaction(s)`. This also protects demo holders that visitors have used through the public demo login.
+- `npm run db:prepare:production` no longer runs the demo seed; only `npm run db:prepare:production -- --with-demo` does. Unknown
+  options are refused (a typo such as `--with-demos` stops the script before it connects anywhere).
+- Regression tests (`backend/tests/integration/seedDemo.test.js`): a re-run immediately, after the keys **expired** (the production
+  bug), after the keys were **deleted**, and for a demo holder who already used the app – each adds no transaction, no audit record
+  and changes no balance; plus the production step list with and without `--with-demo`. With the old behaviour restored, the expired,
+  deleted and visitor cases fail.
+
+Once this fix is committed, `npm run db:prepare:production` is safe to run again (it was paused after the duplicate).
 

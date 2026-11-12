@@ -67,7 +67,7 @@ can be re-derived from the ledger at any time ("a ledger you can prove").
 - Rate limits in **Redis** (shared by all server instances, survive restarts): per IP, plus a per-account login lockout;
   sign-in fails closed (503) if Redis is down.
 - Liveness and readiness checks (`/api/health/live`, `/api/health/ready`: database, Redis, ledger protections, limited DB role).
-- 377 backend tests, 27 browser tests, 15 frontend unit tests.
+- 385 backend tests, 27 browser tests, 15 frontend unit tests.
 
 ## 4. Technology stack
 
@@ -359,7 +359,7 @@ and to the local Redis, database 1 (`redis://127.0.0.1:6379/1`).
 
 | Command (folder) | What it covers | Result |
 |---|---|---|
-| `npm test` (backend) | Jest + Supertest: auth, authorization, accounts, transactions, **financial integrity**, **idempotency**, **concurrency**, ledger tampering, security audit, rate limits **in Redis** (incl. Redis down), readiness, **first-admin bootstrap**, change password, database roles, **onboarding** | 377 tests |
+| `npm test` (backend) | Jest + Supertest: auth, authorization, accounts, transactions, **financial integrity**, **idempotency**, **concurrency**, ledger tampering, security audit, rate limits **in Redis** (incl. Redis down), readiness, **first-admin bootstrap**, change password, database roles, **onboarding**, demo seed (no duplicates) | 385 tests |
 | `npm test` (frontend) | amount parsing (no floating point), validation (incl. onboarding), error messages, idempotency keys | 15 tests |
 | `npm run test:e2e` (frontend) | Playwright in Chrome: registration, login, protected routes, roles, money forms, history, error handling, lost-response retry, change password, onboarding | 27 tests |
 | `npm run smoke` (backend) | end-to-end API check against your running dev server | 61 checks |
@@ -382,13 +382,14 @@ The test tools refuse to run against any database that is not named `ledgerline_
 **Vercel** (frontend) · **Render** (backend) · **Neon** (managed PostgreSQL). Step-by-step guide: **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**.
 
 **Live demo:** <https://ledger-line-umber.vercel.app> (verified 2026-11-12 after step 3: 25/25 live checks, 14/14 database checks, readiness
-all `ok` – see docs/DEPLOYMENT.md. Step 4 – onboarding – is not deployed yet).
+all `ok` – see docs/DEPLOYMENT.md. Step 4 – onboarding – is live as well: readiness `ok`, 15/15 database checks).
 
 - `render.yaml` – Render Blueprint (build `npm ci --include=dev`, start `npm start` – migrations run from your computer, health check
   `/api/health/ready`, `REDIS_URL` from a Render Key Value instance).
 - `frontend/vercel.json` – rewrites `/api/*` to the backend so the browser only talks to one site and the `SameSite=Strict` session cookie
   keeps working (`*.vercel.app` and `*.onrender.com` are different sites), SPA fallback, and security headers (CSP, HSTS, …).
-- `npm run db:prepare:production` – migrations, SYSTEM account, demo data and verification on the production database
+- `npm run db:prepare:production` – migrations, API role privileges, SYSTEM account and verification on the production database;
+  demo data only with `-- --with-demo`
   (reads only `backend/.env.production`; never copies your private admin).
 - `npm run verify:deployment -- <url>` – 27 end-to-end checks against the live site, including onboarding, idempotency, the ₹800 + ₹700 race and that the public demo admin is disabled.
 
@@ -407,7 +408,9 @@ Safe **dummy** accounts created by `npm run db:seed:demo` (reserved `example.com
 | Auditor | `demo.auditor@example.com` | `DemoPass123` |
 
 The demo seed creates 3 accounts and 6 transactions plus one refused withdrawal, all through the real transaction service, with
-fixed idempotency keys – running it again replays instead of duplicating. **Never use these credentials for real data.**
+fixed idempotency keys. Running it again adds nothing: demo transactions are created only if the demo holders have none yet (the keys
+alone were not enough – they expire after 24 hours, which duplicated the demo transactions once on production). **Never use these
+credentials for real data.**
 The demo holders are already onboarded (with an obviously fake profile). A new registration goes through onboarding first –
 use made-up details such as date of birth `1990-01-01`, mobile `9000000000`, PIN code `560001`.
 

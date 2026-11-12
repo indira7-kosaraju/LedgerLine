@@ -11,7 +11,7 @@ test show it. Where it says *mutation-tested*, the protection was temporarily re
 
 - Test files are in `backend/tests/integration/` (Jest + Supertest, run against the separate `ledgerline_test` database) and
   `frontend/e2e/` (Playwright in Chrome). Test names are quoted exactly as Jest/Playwright print them.
-- Run everything: `cd backend && npm test` (377 tests) · `cd frontend && npm run test:e2e` (27 tests).
+- Run everything: `cd backend && npm test` (385 tests) · `cd frontend && npm run test:e2e` (27 tests).
 - Related: [docs/SECURITY_AUDIT.md](docs/SECURITY_AUDIT.md) – the Day 3 audit with the actual result of each attack.
 
 ## Summary
@@ -495,7 +495,8 @@ The audit entry `ONBOARDING_COMPLETE` stores the approval type and terms version
 1. Whoever holds the database owner password (kept only on the operator's computer, never on Render) can still disable the triggers (threat 8).
 2. Rate limits (Redis, per IP and per account): the account lockout can be triggered by others, a Redis outage blocks sign-in, no CAPTCHA or MFA (threat 13).
 3. Stolen tokens stay valid for up to 1 hour unless the owner logs out (threat 12); logout signs out all devices.
-4. Idempotency keys expire after 24 hours and are not cleaned up by a job (threat 1).
+4. Idempotency keys expire after 24 hours and are not cleaned up by a job (threat 1). Anything that re-sends an old key after that – as
+   the demo seed did on 2026-11-12 – is executed again; the demo seed no longer relies on its keys (`seedDemo.test.js`).
 5. Deposits and withdrawals serialize on the SYSTEM account row (throughput, not safety) (threat 2).
 6. 403 vs 404 reveals whether a (random UUID) account id exists (threat 4).
 7. HTTPS is required in production; local development uses plain http.
