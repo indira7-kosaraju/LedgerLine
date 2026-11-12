@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { PASSWORD, signIn, signUp, uniqueEmail, watchForErrors } from './helpers.js'
 
-test('register: validation messages, then success lands on the dashboard', async ({ page }) => {
+test('register: validation messages, then success continues to onboarding', async ({ page }) => {
   const problems = watchForErrors(page)
   await page.goto('/register')
 
@@ -22,8 +22,8 @@ test('register: validation messages, then success lands on the dashboard', async
 
   await page.getByLabel('Confirm password').fill(PASSWORD)
   await page.getByRole('button', { name: 'Create account' }).click()
-  await expect(page).toHaveURL(/\/dashboard$/)
-  await expect(page.getByText('Account created. Welcome to LedgerLine, Asha Rao!')).toBeVisible()
+  await expect(page).toHaveURL(/\/onboarding$/) // step 4: new holders continue with onboarding
+  await expect(page.getByText('Welcome to LedgerLine, Asha Rao! One more step: complete your onboarding.')).toBeVisible()
   expect(problems).toEqual([])
 })
 

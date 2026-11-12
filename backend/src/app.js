@@ -11,6 +11,7 @@ const auditLogRoutes = require('./routes/auditLog.routes');
 const accountRoutes = require('./routes/account.routes');
 const transactionRoutes = require('./routes/transaction.routes');
 const ledgerRoutes = require('./routes/ledger.routes');
+const onboardingRoutes = require('./routes/onboarding.routes');
 const notFound = require('./middleware/notFound');
 const errorHandler = require('./middleware/errorHandler');
 const csrfProtection = require('./middleware/csrfProtection');
@@ -70,6 +71,7 @@ app.use('/api/audit-logs', auditLogRoutes);
 app.use('/api/accounts', accountRoutes);
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/ledger', ledgerRoutes);
+app.use('/api/onboarding', onboardingRoutes);
 
 // These two must stay last.
 app.use(notFound);

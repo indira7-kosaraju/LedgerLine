@@ -30,6 +30,9 @@ const PERMISSIONS = Object.freeze({
   'ledger:read': [ADMIN, AUDITOR],
   'audit:read': [ADMIN, AUDITOR],
 
+  // Onboarding (step 4): an account holder's own status and profile
+  'onboarding:own': [ACCOUNT_HOLDER],
+
   // User administration
   'users:read': [ADMIN],
   'users:manage': [ADMIN],

@@ -4,6 +4,7 @@ const authenticate = require('../middleware/authenticate');
 const { requirePermission } = require('../middleware/authorize');
 const { requireAccountAccess } = require('../middleware/accountAccess');
 const validate = require('../middleware/validate');
+const { requireOnboarded } = require('../middleware/requireOnboarded');
 const { createAccountSchema, listAccountsQuerySchema, updateAccountStatusSchema } = require('../utils/schemas/account.schemas');
 const { statementQuerySchema } = require('../utils/schemas/transaction.schemas');
 const accountController = require('../controllers/account.controller');
@@ -17,7 +18,7 @@ router.use(authenticate);
 //   1. requirePermission  – is this ROLE allowed this kind of action at all?
 //   2. requireAccountAccess – is this USER allowed on THIS account (ownership)?
 
-router.post('/', requirePermission('accounts:create'), validate(createAccountSchema), accountController.create);
+router.post('/', requirePermission('accounts:create'), requireOnboarded('ACCOUNT_CREATE'), validate(createAccountSchema), accountController.create);
 
 router.get(
   '/',

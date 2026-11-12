@@ -66,6 +66,9 @@ export default function AuthProvider({ children }) {
     return user
   }, [])
 
+  // After onboarding (or anything else that changes the user on the server), show the new state.
+  const updateUser = useCallback((user) => setState({ status: 'authenticated', user }), [])
+
   const logout = useCallback(async () => {
     try {
       await authApi.logout()
@@ -75,7 +78,7 @@ export default function AuthProvider({ children }) {
     }
   }, [])
 
-  const value = useMemo(() => ({ ...state, login, register, logout }), [state, login, register, logout])
+  const value = useMemo(() => ({ ...state, login, register, logout, updateUser }), [state, login, register, logout, updateUser])
 
   return <AuthContext value={value}>{children}</AuthContext>
 }

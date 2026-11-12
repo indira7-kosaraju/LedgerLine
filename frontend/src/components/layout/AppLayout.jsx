@@ -28,7 +28,7 @@ function SidebarContent({ onNavigate }) {
       </div>
 
       <nav className="flex-1 space-y-1 px-3 py-4" aria-label="Main">
-        {navItemsFor(user.role).map(({ to, label, icon: Icon }) => (
+        {navItemsFor(user).map(({ to, label, icon: Icon }) => (
           <NavLink
             key={to}
             to={to}

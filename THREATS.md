@@ -1,6 +1,6 @@
 # LedgerLine – Financial Security Threat Model
 
-**Last updated:** 2026-11-07 (Day 3)
+**Last updated:** 2026-11-12 (step 4 – onboarding)
 **System:** React frontend → Express API (JWT in an HttpOnly cookie) → PostgreSQL via Prisma. Simulated money only (INR, stored as integer paise).
 
 ## How to read this document
@@ -11,7 +11,7 @@ test show it. Where it says *mutation-tested*, the protection was temporarily re
 
 - Test files are in `backend/tests/integration/` (Jest + Supertest, run against the separate `ledgerline_test` database) and
   `frontend/e2e/` (Playwright in Chrome). Test names are quoted exactly as Jest/Playwright print them.
-- Run everything: `cd backend && npm test` (344 tests) · `cd frontend && npm run test:e2e` (24 tests).
+- Run everything: `cd backend && npm test` (377 tests) · `cd frontend && npm run test:e2e` (27 tests).
 - Related: [docs/SECURITY_AUDIT.md](docs/SECURITY_AUDIT.md) – the Day 3 audit with the actual result of each attack.
 
 ## Summary
@@ -31,6 +31,7 @@ test show it. Where it says *mutation-tested*, the protection was temporarily re
 | 11 | Deadlocks | ✅ Mitigated | Locks always taken in sorted order; retry on deadlock | `concurrency.test.js` |
 | 12 | Replay attacks | ✅ Mitigated (fixed Day 3) | Idempotent replays; session version revokes tokens on logout | `security.test.js` (mutation-tested) |
 | 13 | Brute-force login attempts | ⚠️ Partially (improved in step 3) | Redis-backed limits per IP **and per account**, fail closed; bcrypt; generic errors | `redisRateLimit.test.js`, `redisDown.test.js`, `rateLimit.test.js`, `auth.test.js` |
+| 14 | Skipping onboarding (accounts or money before approval, self-approval) | ✅ Mitigated (step 4) | Server-side guard on every account/money route + database triggers; strict input | `onboarding.test.js` (mutation-tested), `frontend/e2e/onboarding.spec.js` |
 
 ---
 
@@ -416,7 +417,62 @@ Behind a hosting proxy, `TRUST_PROXY` makes the limit apply to the real client I
 - Render's free Key Value instance keeps data in memory only: if it restarts, all counters start from zero (a restart of the API
   alone no longer resets them).
 - A botnet guessing *different* accounts from many IPs is slowed only by bcrypt and the per-account limit.
+- **Verified in production (2026-11-12, after step 3):** `/api/health/ready` reported `redis: ok`; the `RateLimit` headers showed
+  `600-in-15min` with counts carried across requests; demo logins, the cookie login and a registration succeeded through the
+  Redis-backed limiters (25/25 live checks). The login, account and registration limits themselves were not triggered on production
+  (that would lock accounts and add audit records) – they are proven by the tests above.
 - Equal timing for wrong password vs. unknown email was measured manually on Day 1 (~0.2 s each); it is not an automated test.
+
+---
+
+## 14. Skipping onboarding
+
+**Description.** Opening accounts or moving money without having completed onboarding, or approving oneself.
+
+**Attack scenario.** A freshly registered user calls `POST /api/accounts` or `/api/transactions/deposit` directly with a tool, skipping
+the onboarding page; or submits `"onboardingStatus": "APPROVED"`; or submits the form twice at once to create two profiles; or a bug
+in the API opens an account for a user who is not approved.
+
+**Possible impact.** Accounts held by users who never accepted the terms or gave the (demo) details the platform requires.
+
+**Prevention mechanism.** New account holders start at `PENDING_PROFILE`. Every account and money route checks the status, which is
+loaded fresh from the database on each request (`403 ONBOARDING_INCOMPLETE`, audited), before validation and before an
+idempotency key is stored. Approval happens only in `POST /api/onboarding`: strict input, so unknown fields such as
+`onboardingStatus` are rejected; age 18 or older, an Indian mobile number, PIN code, state and occupation from fixed lists, and the
+**current** terms version. The status is changed under a row lock, and there is one profile per user (primary key), so simultaneous
+submissions produce exactly one approval. The database enforces the same rules itself:
+- the trigger `accounts_owner_onboarded` refuses customer accounts for owners who are not approved;
+- the trigger `users_onboarding_requires_profile` refuses approving an account holder without a profile and accepted terms;
+- CHECK constraints cover the phone and PIN format and keep the status and its date consistent;
+- the API role may only read and insert profiles – it cannot change or delete them.
+
+The audit entry `ONBOARDING_COMPLETE` stores the approval type and terms version, never the personal details.
+
+**Implemented protection.** `backend/src/middleware/requireOnboarded.js`, `backend/src/routes/account.routes.js`,
+`backend/src/routes/transaction.routes.js`, `backend/src/services/onboarding.service.js`, `backend/src/utils/schemas/onboarding.schemas.js`,
+`backend/prisma/migrations/20261112120000_customer_onboarding/migration.sql`, `backend/scripts/setup-db-roles.js` (`customer_profiles`).
+
+**Corresponding tests.**
+- `onboarding.test.js` › "opening an account → 403 ONBOARDING_INCOMPLETE, audited", "deposit / withdraw / transfer → 403
+  ONBOARDING_INCOMPLETE before validation, no idempotency key stored", "nobody can approve themselves: extra fields like
+  onboardingStatus are rejected", "5 submissions at the same moment → exactly one succeeds, one profile", "approving an account holder
+  without a profile → refused by trigger", "a customer account for a holder who is not onboarded → refused by trigger", "the API role
+  cannot change or delete a profile once written", "approved at once; profile stored normalised; audit has no personal details;
+  accounts and money work", and 11 invalid-input cases (under 18 by one day, impossible date, wrong phone/PIN/state/city/occupation,
+  terms not accepted, outdated terms version)
+- `onboarding.test.js` › "an approved holder WITHOUT a profile (as the migration left existing users) can still open accounts and log in"
+- `frontend/e2e/onboarding.spec.js` › "before onboarding: no "open account" buttons, money pages show the notice, and the API refuses"
+- Mutation-tested: the guard removed from opening accounts or from transfers, the guard letting everyone through, extra fields
+  allowed, no minimum age, any terms version, personal data in the audit log, the account trigger disabled – each made a test fail.
+  Removing only the "already complete" check or only the row lock did **not**, because the one-profile-per-user primary key still
+  turns a second submission into 409; removing that mapping as well made 2 tests fail.
+
+**Remaining accepted risks.**
+- **No real identity check (KYC):** the profile is self-declared demo data and approval is automatic, so anyone can be approved with
+  made-up details. That is deliberate for a demo; a real platform would verify identity and allow manual review.
+- Users who existed before step 4 were approved by the migration without a profile or terms acceptance.
+- Personal details are stored in plain columns (not encrypted at rest beyond what the database host provides); users are told to enter
+  only made-up data.
 
 ---
 
@@ -446,3 +502,4 @@ Behind a hosting proxy, `TRUST_PROXY` makes the limit apply to the real client I
 8. No independent penetration test; LedgerLine uses simulated money only.
 9. Deployed behind Vercel + Render with `TRUST_PROXY=2`: requests sent **directly** to the `onrender.com` URL (bypassing Vercel) can fake one
    `X-Forwarded-For` entry and so evade the per-IP rate limit. Traffic through the app's own URL is not affected.
+10. Onboarding has no real identity check: approval is automatic for any valid (made-up) profile; earlier users were approved without one (threat 14).

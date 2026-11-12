@@ -1,10 +1,12 @@
-import { ArrowDownIcon, ArrowUpIcon, BookIcon, HomeIcon, ListIcon, ShieldIcon, TransferIcon, UserIcon, UsersIcon, WalletIcon } from '../components/icons'
-import { can } from './roles'
+import { ArrowDownIcon, ArrowUpIcon, BookIcon, CheckCircleIcon, HomeIcon, ListIcon, ShieldIcon, TransferIcon, UserIcon, UsersIcon, WalletIcon } from '../components/icons'
+import { can, needsOnboarding } from './roles'
 
 // Sidebar items. `permission` hides items the role can't use (UI only –
 // the routes are also protected, and the backend enforces everything).
 const NAV_ITEMS = [
   { to: '/dashboard', label: 'Dashboard', icon: HomeIcon },
+  // Only while onboarding is not finished (step 4)
+  { to: '/onboarding', label: 'Onboarding', icon: CheckCircleIcon, permission: 'onboarding:own', show: needsOnboarding },
   { to: '/accounts', label: 'Accounts', icon: WalletIcon },
   { to: '/transactions', label: 'Transactions', icon: ListIcon },
   { to: '/deposit', label: 'Deposit', icon: ArrowDownIcon, permission: 'transactions:create' },
@@ -16,6 +18,6 @@ const NAV_ITEMS = [
   { to: '/profile', label: 'Profile', icon: UserIcon },
 ]
 
-export function navItemsFor(role) {
-  return NAV_ITEMS.filter((item) => !item.permission || can(role, item.permission))
+export function navItemsFor(user) {
+  return NAV_ITEMS.filter((item) => (!item.permission || can(user.role, item.permission)) && (!item.show || item.show(user)))
 }

@@ -31,6 +31,7 @@ const PRIVILEGES = Object.freeze({
   ledger_entries: ['SELECT', 'INSERT'], // append-only history
   audit_logs: ['SELECT', 'INSERT'], // append-only history
   idempotency_keys: ['SELECT', 'INSERT', 'UPDATE', 'DELETE'], // DELETE: expired keys are replaced
+  customer_profiles: ['SELECT', 'INSERT'], // onboarding profile: written once, never changed or deleted by the API
   _prisma_migrations: [], // migrations are the owner's job
 });
 const SEQUENCES = Object.freeze({ ledger_entries_entryNumber_seq: ['USAGE'] });

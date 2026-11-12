@@ -6,7 +6,9 @@ Simulated money only – never use real banking data.
 **Current deployment (verified 2026-11-12):** frontend <https://ledger-line-umber.vercel.app> · backend
 <https://ledgerline-z5o2.onrender.com> · Neon PostgreSQL 18. The API connects as `ledgerline_api`; `verify-db` passed 14/14 and
 `verify-deployment` 25/25 (see "Production verification" at the end).
-**Step 3 (Redis rate limits + readiness) is implemented and tested locally but not deployed yet** – it needs the Redis step below first.
+Step 3 (Redis rate limits + readiness) is deployed and verified (see "Production verification – step 3" at the end).
+**Step 4 (onboarding) is implemented and tested locally but not deployed yet** – it needs the database migration first (see "Deploying a
+migration" below).
 
 ```
 Browser ──https──▶ <app>.vercel.app ──┬─ /, /dashboard, …  → React app (static files on Vercel)
@@ -162,7 +164,7 @@ Then try it in a browser with the demo credentials (README → Demo credentials)
   small free-plan server from opening a large pool (the role itself is capped at 50 connections).
 - `npm run db:prepare:production` checks all of this (different roles, direct owner host, `pgbouncer=true`) and refuses otherwise.
 
-## Production verification (2026-11-12)
+## Production verification – step 2 (2026-11-12)
 
 Run after switching Render's `DATABASE_URL` to `ledgerline_api`. Database checks were read-only; the live checks create a test user.
 
@@ -178,4 +180,44 @@ Run after switching Render's `DATABASE_URL` to `ledgerline_api`. Database checks
 
 The live run permanently added one `deploy-check-…@example.com` user, 3 accounts and 6 transactions (simulated money; the ledger and
 audit log are append-only, so they stay).
+
+## Production verification – step 3 (2026-11-12)
+
+Commit `7c324eb` (Redis rate limits + readiness), with a Render Key Value instance (`ledgerline-redis`, Free, Singapore, `noeviction`,
+internal access only) and `REDIS_URL` set on the API. Health, readiness and database checks were read-only; only the 25 live checks
+created data.
+
+| Check | Result |
+|---|---|
+| `GET /api/health` · `/api/health/live` | ✅ 200 · ✅ 200 `alive` |
+| `GET /api/health/ready` (directly and through Vercel) | ✅ 200 – `database`, `redis`, `schema`, `dbRole` all `ok`; `Cache-Control: no-store` |
+| Health checks not rate limited | ✅ 20 of 20 quick readiness requests → 200, no `RateLimit` headers |
+| App connections on Neon | ✅ only `ledgerline_api` (3, via pgbouncer) |
+| General limit configuration | ✅ `RateLimit-Policy: "600-in-15min"`; for one client key the remaining count fell 595 → 594 → 593 across requests (stored in Redis) |
+| Login / account / registration limits | ⏭️ deliberately not triggered on production (would lock accounts and add audit records) – covered by the backend tests |
+| Frontend | ✅ HTTPS, CSP/HSTS/nosniff/X-Frame-Options, SPA deep link, http→https 308 |
+| `verify-db` as `ledgerline_api` | ✅ 14/14, before and after the live run (27 transactions, 54 entries afterwards) |
+| `npm run verify:deployment -- https://ledger-line-umber.vercel.app` | ✅ 25/25 – logins and registration now run through the Redis-backed limiters |
+| Demo admin / bootstrapped admin | ✅ demo admin disabled; exactly one other active admin |
+
+Observation: requests from one computer were counted under up to three client keys (one for IPv6, two for IPv4). That fits a network
+with several public addresses; IPv6 requests always got the same key, directly and through Vercel. Not confirmed with an outside
+IP service. The live run permanently added one more `deploy-check-…` user, 3 accounts and 6 transactions.
+
+## Deploying a migration (step 4 and later)
+
+The server never migrates (it only has the limited role). For a release that contains a migration:
+
+1. From your computer: `cd backend && npm run db:prepare:production` – applies the migration as the owner, re-runs `db:roles` (new tables
+   get their privileges; an unlisted table stops the script), seeds and runs `verify-db`.
+2. Then push. Until step 1 has run, the new version's readiness check reports `schema: failed` (its triggers are missing), so Render
+   does not switch to it and the previous version keeps serving.
+
+Step 4's migration (`20261112120000_customer_onboarding`) only adds things: two enums, four columns on `users`, the
+`customer_profiles` table, CHECK constraints and two triggers. Existing users are marked `APPROVED`; no data is changed or deleted.
+After it: `verify-db` has 15 checks and `verify-deployment` 27.
+
+**Short window between migration and deploy:** the previous version keeps serving until the new one is live. During that time a user
+who registers *after* the migration starts at `PENDING_PROFILE`, the old frontend has no onboarding page, and opening an account fails
+with a generic 500 (the new trigger refuses it). Existing users are not affected. Keep the window short: migrate, then push at once.
 

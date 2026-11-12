@@ -18,6 +18,8 @@ import AccountCard from '../components/domain/AccountCard'
 import { AccountLink } from '../components/domain/TransactionsTable'
 import { AccountStatusBadge } from '../components/domain/StatusBadges'
 import { PlusIcon } from '../components/icons'
+import OnboardingNotice from '../components/domain/OnboardingNotice'
+import { needsOnboarding } from '../config/roles'
 
 const LIMIT = 20
 
@@ -122,6 +124,7 @@ function AllAccounts() {
 
 // ACCOUNT_HOLDER: their own accounts as cards.
 function MyAccounts() {
+  const { user } = useAuth()
   const toast = useToast()
   const [opening, setOpening] = useState(false)
   const accounts = useApi((opts) => listAccounts({ limit: 100 }, opts))
@@ -145,13 +148,16 @@ function MyAccounts() {
         title="My accounts"
         description={accounts.data ? `Total balance ${accounts.data.summary.totalBalance.formatted}` : 'Your LedgerLine accounts'}
         actions={
-          <Button onClick={handleOpenAccount} loading={opening}>
-            <PlusIcon className="size-4" /> Open new account
-          </Button>
+          !needsOnboarding(user) && (
+            <Button onClick={handleOpenAccount} loading={opening}>
+              <PlusIcon className="size-4" /> Open new account
+            </Button>
+          )
         }
       />
       <ErrorState error={accounts.error} onRetry={accounts.reload} className="mb-6" />
-      {accounts.data?.items.length === 0 && <p className="text-sm text-slate-500">You don&apos;t have any accounts yet.</p>}
+      {needsOnboarding(user) && <OnboardingNotice className="mb-6" />}
+      {accounts.data?.items.length === 0 && !needsOnboarding(user) && <p className="text-sm text-slate-500">You don&apos;t have any accounts yet.</p>}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {accounts.data?.items.map((account) => (
           <AccountCard key={account.id} account={account} />

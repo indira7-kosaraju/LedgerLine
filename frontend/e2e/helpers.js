@@ -17,13 +17,24 @@ export const AUDITOR = { email: testEnv.SEED_AUDITOR_EMAIL, password: testEnv.SE
 
 export const uniqueEmail = (prefix = 'e2e') => `${prefix}-${randomUUID().slice(0, 8)}@example.com`
 
+// Demo onboarding details (step 4) – obviously fake, like the app asks for.
+export const DEMO_DETAILS = { dateOfBirth: '1990-01-01', phone: '9000000000', city: 'Bengaluru', state: 'Karnataka', pinCode: '560001', occupation: 'OTHER' }
+
 // Registers through the API inside the page's browser context, so the session cookie
 // lands in the browser – the page is then signed in, exactly like after the form.
-export async function signUp(page, fullName = 'E2E User') {
+// Completes onboarding too (approved automatically) unless { onboard: false }.
+export async function signUp(page, fullName = 'E2E User', { onboard = true } = {}) {
   const email = uniqueEmail()
   const res = await page.request.post(`${API}/auth/register`, { data: { email, password: PASSWORD, fullName } })
   expect(res.status()).toBe(201)
-  return { email, password: PASSWORD, user: (await res.json()).user }
+  let { user } = await res.json()
+  if (onboard) {
+    const { onboarding } = await apiGet(page, '/onboarding')
+    const done = await apiPost(page, '/onboarding', { ...DEMO_DETAILS, acceptTerms: true, termsVersion: onboarding.requirements.termsVersion })
+    expect(done.status()).toBe(200)
+    user = (await done.json()).user
+  }
+  return { email, password: PASSWORD, user }
 }
 
 // Cookie-authenticated API call from the page's context (needs the CSRF header like the app).

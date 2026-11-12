@@ -65,3 +65,41 @@ export function fieldErrorsFromApi(error) {
   }
   return result
 }
+
+// Onboarding (step 4). Mirrors backend/src/utils/schemas/onboarding.schemas.js; the lists of states and
+// occupations and the minimum age come from GET /api/onboarding (`requirements`).
+export function ageOn(dateOfBirth, today = new Date()) {
+  const [y, m, d] = dateOfBirth.split('-').map(Number)
+  let age = today.getUTCFullYear() - y
+  if (today.getUTCMonth() + 1 < m || (today.getUTCMonth() + 1 === m && today.getUTCDate() < d)) age -= 1
+  return age
+}
+
+const isCalendarDate = (value) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+  const date = new Date(`${value}T00:00:00Z`)
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value
+}
+
+export const normalisePhone = (phone) => phone.replace(/[\s-]/g, '').replace(/^(\+91|0091|0)(?=\d{10}$)/, '')
+
+export function validateOnboardingDetails(values, requirements) {
+  const errors = {}
+  if (!values.dateOfBirth) errors.dateOfBirth = 'Date of birth is required'
+  else if (!isCalendarDate(values.dateOfBirth)) errors.dateOfBirth = 'Enter a valid date'
+  else if (ageOn(values.dateOfBirth) < requirements.minimumAge) errors.dateOfBirth = `You must be at least ${requirements.minimumAge} years old`
+  else if (ageOn(values.dateOfBirth) > 120) errors.dateOfBirth = 'Enter a valid date of birth'
+
+  if (!values.phone.trim()) errors.phone = 'Mobile number is required'
+  else if (!/^[6-9]\d{9}$/.test(normalisePhone(values.phone))) errors.phone = 'Enter a 10-digit Indian mobile number (starting with 6, 7, 8 or 9)'
+
+  const city = values.city.trim().replace(/\s+/g, ' ')
+  if (city.length < 2) errors.city = 'City must be at least 2 characters'
+  else if (city.length > 60) errors.city = 'City must be at most 60 characters'
+  else if (!/^[A-Za-z][A-Za-z .'-]*$/.test(city)) errors.city = 'City may only contain letters, spaces, ".", "\'" and "-"'
+
+  if (!requirements.states.includes(values.state)) errors.state = 'Choose a state or union territory'
+  if (!/^[1-9]\d{5}$/.test(values.pinCode.trim())) errors.pinCode = 'Enter a 6-digit PIN code'
+  if (!requirements.occupations.includes(values.occupation)) errors.occupation = 'Choose an occupation'
+  return errors
+}

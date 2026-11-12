@@ -14,6 +14,8 @@ import { Card, CardHeader } from '../../components/ui/Card'
 import AccountCard from '../../components/domain/AccountCard'
 import TransactionsTable from '../../components/domain/TransactionsTable'
 import { PlusIcon, WalletIcon } from '../../components/icons'
+import OnboardingNotice from '../../components/domain/OnboardingNotice'
+import { needsOnboarding } from '../../config/roles'
 
 function greeting() {
   const hour = new Date().getHours()
@@ -52,11 +54,15 @@ export default function HolderDashboard() {
         title={user.fullName}
         description="Here is an overview of your LedgerLine accounts."
         actions={
-          <Button onClick={handleOpenAccount} loading={opening}>
-            <PlusIcon className="size-4" /> Open new account
-          </Button>
+          !needsOnboarding(user) && (
+            <Button onClick={handleOpenAccount} loading={opening}>
+              <PlusIcon className="size-4" /> Open new account
+            </Button>
+          )
         }
       />
+
+      {needsOnboarding(user) && <OnboardingNotice className="mb-6" />}
 
       <ErrorState error={accounts.error} onRetry={accounts.reload} className="mb-6" />
 
@@ -76,7 +82,9 @@ export default function HolderDashboard() {
 
       <section className="mt-8">
         <h2 className="mb-3 text-base font-semibold text-slate-900">Your accounts</h2>
-        {accounts.data && items.length === 0 ? (
+        {accounts.data && items.length === 0 && needsOnboarding(user) ? (
+          <p className="text-sm text-slate-500">Your accounts will appear here once your onboarding is complete.</p>
+        ) : accounts.data && items.length === 0 ? (
           <div className="rounded-xl border border-dashed border-slate-300 bg-white px-6 py-10 text-center">
             <WalletIcon className="mx-auto size-8 text-slate-400" />
             <p className="mt-3 font-medium text-slate-900">You don&apos;t have an account yet</p>

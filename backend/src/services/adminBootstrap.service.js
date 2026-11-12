@@ -63,7 +63,7 @@ async function bootstrapFirstAdmin({ email, fullName, password, replaceDemoAdmin
       }
 
       const admin = await tx.user.create({
-        data: { email: input.email, fullName: input.fullName, passwordHash, role: 'ADMIN' },
+        data: { email: input.email, fullName: input.fullName, passwordHash, role: 'ADMIN', onboardingStatus: 'APPROVED', onboardedAt: new Date() }, // staff: no customer onboarding
         select: { id: true, email: true, fullName: true, role: true, createdAt: true },
       });
 

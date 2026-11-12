@@ -15,7 +15,7 @@ function getToken(req) {
   return req.cookies?.[SESSION_COOKIE] || null;
 }
 
-// Protects a route. On success, sets req.user = { id, email, fullName, role }.
+// Protects a route. On success, sets req.user = { id, email, fullName, role, onboardingStatus }.
 async function authenticate(req, res, next) {
   const token = getToken(req);
 
@@ -36,7 +36,7 @@ async function authenticate(req, res, next) {
   // trusting the (possibly old) role inside the token.
   const user = await prisma.user.findUnique({
     where: { id: payload.sub },
-    select: { id: true, email: true, fullName: true, role: true, isActive: true, sessionVersion: true },
+    select: { id: true, email: true, fullName: true, role: true, isActive: true, sessionVersion: true, onboardingStatus: true },
   });
 
   if (!user || !user.isActive) {
@@ -49,7 +49,7 @@ async function authenticate(req, res, next) {
     return next(new AppError(401, 'Your session has ended. Please sign in again.', 'SESSION_REVOKED'));
   }
 
-  req.user = { id: user.id, email: user.email, fullName: user.fullName, role: user.role };
+  req.user = { id: user.id, email: user.email, fullName: user.fullName, role: user.role, onboardingStatus: user.onboardingStatus };
   next();
 }
 

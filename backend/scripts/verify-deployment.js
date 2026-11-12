@@ -74,6 +74,11 @@ async function main() {
   const reg = await call('POST', '/auth/register', { body: { email, password: 'Deploy123check', fullName: 'Deployment Check' } });
   check('register', reg.status === 201);
   const me = reg.body?.token;
+  // Onboarding (step 4): no account before it, approved automatically with a valid (demo) profile and the current terms.
+  check('account refused before onboarding (403)', (await call('POST', '/accounts', { token: me, body: {} })).body?.error?.code === 'ONBOARDING_INCOMPLETE');
+  const termsVersion = (await call('GET', '/onboarding', { token: me })).body?.onboarding?.requirements?.termsVersion;
+  const onboard = await call('POST', '/onboarding', { token: me, body: { dateOfBirth: '1990-01-01', phone: '9000000000', city: 'Demo City', state: 'Karnataka', pinCode: '560001', occupation: 'OTHER', acceptTerms: true, termsVersion } });
+  check('onboarding approved automatically', onboard.status === 200 && onboard.body?.user?.onboardingStatus === 'APPROVED');
   const a = (await call('POST', '/accounts', { token: me, body: {} })).body?.account;
   const b = (await call('POST', '/accounts', { token: me, body: {} })).body?.account;
   check('open two accounts', Boolean(a && b));

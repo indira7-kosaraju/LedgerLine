@@ -16,8 +16,12 @@ const PERMISSIONS = {
   'ledger:read': ['ADMIN', 'AUDITOR'],
   'audit:read': ['ADMIN', 'AUDITOR'],
   'users:manage': ['ADMIN'],
+  'onboarding:own': ['ACCOUNT_HOLDER'],
 }
 
 export function can(role, permission) {
   return PERMISSIONS[permission]?.includes(role) ?? false
 }
+
+// Account holders must finish onboarding (step 4) before opening accounts or moving money.
+export const needsOnboarding = (user) => user?.role === 'ACCOUNT_HOLDER' && user.onboardingStatus !== 'APPROVED'

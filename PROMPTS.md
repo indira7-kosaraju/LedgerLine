@@ -45,6 +45,7 @@ or incomplete, how that was found, and how it was fixed.
 | 23 | 2026-11-11 | Update · Step 1 | **security**, authentication, admin bootstrap | `feat: add secure first-admin bootstrap and password change` |
 | 24 | 2026-11-11 | Update · Step 2 | **security**, database roles, ledger integrity | `security: run the API as a limited database role` |
 | 25 | 2026-11-12 | Update · Step 3 | **security**, rate limiting, readiness | `feat: add Redis rate limiting, account lockout and readiness checks` |
+| 26 | 2026-11-12 | Update · Step 4 | onboarding, **security**, database integrity | `feat: add customer onboarding with automatic approval` |
 
 ---
 
@@ -849,10 +850,68 @@ frontend unit 13/13, frontend lint clean, `verify-db` 14/14 locally. Mutation te
 on every command (2), health routes rate limited again (3), the dbRole check disabled (1), production starting without Redis (1),
 readiness revealing error text (5). Started by hand in production mode: without `REDIS_URL` → exit 1; Redis unreachable → exit 1
 after 10 s, the password in the URL not printed; with Redis → readiness 200, SIGTERM → exit 0. Captured from a local server with Redis
-stopped: readiness 503 `redis: failed`, login 503 `SERVICE_UNAVAILABLE`. **Not done:** anything on Render (Key Value instance,
-`REDIS_URL`, deploy) – waiting for my approval.
+stopped: readiness 503 `redis: failed`, login 503 `SERVICE_UNAVAILABLE`.
+
+**Production (2026-11-12, each step approved separately):** R1–R2 (done by me): Render Key Value `ledgerline-redis` (Free, Singapore,
+`noeviction`, internal only) and `REDIS_URL` on the API; the live site stayed healthy. R3 (done by me): commit `7c324eb` pushed and
+live. R4: `/api/health`, `/live`, `/ready` all 200 with `database`, `redis`, `schema`, `dbRole` = `ok`; 20 quick readiness requests
+all 200 (not rate limited); only `ledgerline_api` connections on Neon; `RateLimit-Policy "600-in-15min"` with counts carried across
+requests in Redis; frontend and rewrite OK; `verify-db` 14/14; `verify-deployment` **25/25** (logins and registration through the
+Redis-backed limiters). Not done on purpose: triggering the login/account/registration limits on production. Observation: my requests
+were counted under up to three client keys (IPv6 vs. two IPv4 addresses) – consistent with my network, not confirmed externally.
 
 **Related commit:** `feat: add Redis rate limiting, account lockout and readiness checks`
+
+**My review notes:** _(to be completed by me)_
+
+---
+
+## Entry 26 – Registration and onboarding with automatic approval (step 4)
+
+**Date:** 2026-11-12
+
+**Prompt given to AI:** "approve step 4, option A, fields as proposed" – automatic approval after a valid profile (date of birth,
+phone, city, state, PIN code, occupation) and terms acceptance; a clear warning not to enter real personal data; no accounts or
+transactions before approval; keep all existing users and data; backend and Playwright tests; record the step 3 production results.
+
+**What AI generated:** migration `20261112120000_customer_onboarding` (enums, four columns on `users`, `customer_profiles`, CHECK
+constraints, triggers `users_onboarding_requires_profile` and `accounts_owner_onboarded`, existing users set to `APPROVED`);
+`src/config/onboarding.js`, `src/utils/schemas/onboarding.schemas.js`, `src/services/onboarding.service.js`, controller and
+`GET/POST /api/onboarding`; `src/middleware/requireOnboarded.js` on account and money routes; `onboardingStatus` in the session user
+and public user fields; `customer_profiles` (SELECT, INSERT) in `setup-db-roles.js`; the new triggers/constraints in readiness and
+`verify-db` (15th check: every account owner onboarded); seeds and `admin:bootstrap` create staff approved and demo holders with a fake
+profile; frontend `OnboardingPage` (demo warning, two steps, terms), `OnboardingNotice`, `OnboardingGate`, navigation and redirect
+after registration; `tests/integration/onboarding.test.js` (33 tests), `frontend/e2e/onboarding.spec.js` (3), 2 frontend unit tests;
+onboarding in `verify-deployment.js` (27 checks) and the smoke test (61); documentation.
+
+**What was incorrect or incomplete:**
+1. **Found in the inspection:** a new user could open accounts and move simulated money immediately after registering – no profile,
+   no terms, no status.
+2. **Two existing tests broke for intended reasons:** a CSRF test opened an account with a freshly registered (not onboarded) user, and
+   the `/me` field allow-list did not include `onboardingStatus`. The registration browser test expected the dashboard instead of
+   `/onboarding`. All three were updated to the new behaviour, keeping what they test.
+3. **Two mutations survived:** removing the "already complete" check or the row lock still gave 409, because the one-profile-per-user
+   primary key catches the second submission. Kept as defence in depth and documented; removing that mapping too made 2 tests fail.
+4. **A gap found while writing the rollout steps:** between the migration and the new deploy, a user who registers on the old version
+   cannot onboard and gets a 500 when opening an account (the new trigger). Documented in docs/DEPLOYMENT.md; the window must be short.
+5. **The AI's own test mistake:** "You must be at least 18 years old" matched both the page subtitle and the error (Playwright strict
+   mode) – the test now matches the error text exactly.
+
+**How the issue was identified:** (1) reading `auth.service.js` and the routes; (2)–(3), (5) test runs and mutation tests; (4) thinking
+through the deploy order.
+
+**How it was corrected:** see "What AI generated"; (2) tests onboard the user first or expect the new field / page; (3) documented;
+(4) documented procedure "migrate, then push at once" – readiness blocks the reverse order.
+
+**How it was verified:** backend **377/377** (20 suites), Playwright **27/27**, frontend unit 15/15, frontend lint clean, production build
+OK, smoke test 61/61, `verify-db` 15/15 on the development database after the migration, local rehearsal of `verify-deployment`:
+25 of 27 – the two failures are local-only (the development database has the demo admin on purpose; cookies are not `Secure` over
+local http), the 2 new onboarding checks passed. Mutation tests – each made a test fail: guard removed from opening accounts (1) or
+transfers (1), guard letting everyone through (4), extra fields allowed (1), no minimum age (1), any terms version (1), personal data
+in the audit log (1), the account trigger disabled on the test database (1). Real API responses captured for docs/API.md.
+**Not done:** the production migration and deploy – waiting for my approval.
+
+**Related commit:** `feat: add customer onboarding with automatic approval`
 
 **My review notes:** _(to be completed by me)_
 
@@ -893,3 +952,4 @@ git log --oneline --reverse
 | 23 | `feat: add secure first-admin bootstrap and password change` | |
 | 24 | `security: run the API as a limited database role` | |
 | 25 | `feat: add Redis rate limiting, account lockout and readiness checks` | |
+| 26 | `feat: add customer onboarding with automatic approval` | |

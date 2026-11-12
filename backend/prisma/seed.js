@@ -56,7 +56,8 @@ async function seedPrivilegedUser(role, email, password, fullName) {
 
   const rounds = Number(process.env.BCRYPT_SALT_ROUNDS) || 12;
   const passwordHash = await bcrypt.hash(password, rounds);
-  const user = await prisma.user.create({ data: { email: normalizedEmail, passwordHash, fullName, role } });
+  // Staff need no customer onboarding (step 4) – they are approved from the start.
+  const user = await prisma.user.create({ data: { email: normalizedEmail, passwordHash, fullName, role, onboardingStatus: 'APPROVED', onboardedAt: new Date() } });
   // A privileged user never appears without a trace in the audit log.
   await prisma.auditLog.create({
     data: { action: 'USER_SEED', outcome: 'SUCCESS', entityType: 'User', entityId: user.id, metadata: { email: normalizedEmail, role }, userAgent: 'prisma/seed.js' },

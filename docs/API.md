@@ -56,9 +56,9 @@ Every error has the same shape:
 |---|---|---|
 | 400 | Invalid input | `VALIDATION_ERROR`, `INVALID_JSON`, `SAME_ACCOUNT`, `IDEMPOTENCY_KEY_REQUIRED`, `IDEMPOTENCY_KEY_INVALID`, `CANNOT_CHANGE_OWN_STATUS` |
 | 401 | Not signed in / session invalid | `UNAUTHENTICATED`, `INVALID_CREDENTIALS`, `SESSION_REVOKED` |
-| 403 | Signed in but not allowed | `FORBIDDEN`, `NOT_OWNER`, `CSRF_REJECTED` |
+| 403 | Signed in but not allowed | `FORBIDDEN`, `NOT_OWNER`, `CSRF_REJECTED`, `ONBOARDING_INCOMPLETE` |
 | 404 | Not found | `NOT_FOUND`, `ACCOUNT_NOT_FOUND`, `DESTINATION_NOT_FOUND` |
-| 409 | Conflict with existing data | `EMAIL_TAKEN`, `ACCOUNT_LIMIT_REACHED`, `STATUS_UNCHANGED`, `ACCOUNT_CLOSED`, `BALANCE_NOT_ZERO`, `IDEMPOTENCY_IN_PROGRESS` |
+| 409 | Conflict with existing data | `EMAIL_TAKEN`, `ONBOARDING_ALREADY_COMPLETE`, `ACCOUNT_LIMIT_REACHED`, `STATUS_UNCHANGED`, `ACCOUNT_CLOSED`, `BALANCE_NOT_ZERO`, `IDEMPOTENCY_IN_PROGRESS` |
 | 413 | Body larger than 10 KB | `PAYLOAD_TOO_LARGE` |
 | 422 | Valid request, refused by a business rule | `INSUFFICIENT_FUNDS`, `AMOUNT_EXCEEDS_LIMIT`, `ACCOUNT_NOT_ACTIVE`, `DESTINATION_NOT_ACTIVE`, `IDEMPOTENCY_KEY_REUSED` |
 | 429 | Too many requests (`Retry-After` header in seconds) | `RATE_LIMITED` |
@@ -83,6 +83,8 @@ List endpoints accept `page` (default 1) and `limit` (default 20, max 100) and r
 | POST | [/auth/register](#post-authregister) | – | – |
 | POST | [/auth/login](#post-authlogin) | – | – |
 | GET | [/auth/me](#get-authme) | ✅ | any |
+| GET | [/onboarding](#get-onboarding) | ✅ | ACCOUNT_HOLDER |
+| POST | [/onboarding](#post-onboarding) | ✅ | ACCOUNT_HOLDER |
 | POST | [/auth/change-password](#post-authchange-password) | ✅ | any |
 | POST | [/auth/logout](#post-authlogout) | optional | any |
 | POST | [/accounts](#post-accounts) | ✅ | ACCOUNT_HOLDER |
@@ -154,7 +156,8 @@ Every check must pass within 2 seconds; the result is reused for 2 seconds (`Cac
 
 ### POST /auth/register
 
-Creates an **ACCOUNT_HOLDER** and signs in (sets the session cookie). Rate limit: 10 per hour per IP (counters in Redis).
+Creates an **ACCOUNT_HOLDER** with `onboardingStatus: "PENDING_PROFILE"` and signs in (sets the session cookie). The new user must
+complete [onboarding](#onboarding) before opening accounts. Rate limit: 10 per hour per IP (counters in Redis).
 
 **Request**
 ```json
@@ -167,6 +170,7 @@ Creates an **ACCOUNT_HOLDER** and signs in (sets the session cookie). Rate limit
 ```json
 {
   "user": { "id": "d5ff2ab0-…", "email": "docs@example.com", "fullName": "Docs User", "role": "ACCOUNT_HOLDER", "isActive": true,
+            "onboardingStatus": "PENDING_PROFILE",
             "createdAt": "2026-11-07T17:11:56.056Z", "updatedAt": "2026-11-07T17:11:56.056Z" },
   "token": "eyJhbGciOiJIUzI1NiIs…"
 }
@@ -234,12 +238,78 @@ Clears the cookie and **revokes every token issued to this user so far** (signs 
 
 ---
 
+## Onboarding
+
+Step 4. A new account holder can sign in at once, but **cannot open accounts or move money** until onboarding is complete:
+`POST /accounts`, `/transactions/deposit`, `/withdraw` and `/transfer` answer `403 ONBOARDING_INCOMPLETE` (audited) – the
+database refuses such accounts too. Approval is **automatic**: a valid profile plus the current terms approves the user at once.
+Users that existed before step 4 were approved by the migration. Admins and auditors need no onboarding.
+
+> LedgerLine is a demo: the profile must contain **made-up** data, never real personal information.
+
+```json
+{ "error": { "code": "ONBOARDING_INCOMPLETE", "message": "Complete your onboarding before opening accounts or moving money" } }
+```
+
+### GET /onboarding
+
+The caller's own status and profile, plus the rules the form must follow (`requirements` – the frontend reads these, so it
+always matches the server). ACCOUNT_HOLDER only; admins and auditors get 403.
+
+**Response 200** (captured locally; `states` shortened here – the real list has all 36 states and union territories)
+```json
+{ "onboarding": { "status": "PENDING_PROFILE", "onboardedAt": null, "termsAcceptedVersion": null, "termsAcceptedAt": null, "profile": null,
+  "requirements": { "termsVersion": "2026-11-12", "minimumAge": 18, "states": ["Andhra Pradesh", "Arunachal Pradesh", "Assam", "…"],
+                    "occupations": ["SALARIED", "SELF_EMPLOYED", "BUSINESS_OWNER", "STUDENT", "HOMEMAKER", "RETIRED", "OTHER"] } } }
+```
+
+### POST /onboarding
+
+**Request**
+```json
+{ "dateOfBirth": "1990-01-01", "phone": "+91 90000 00000", "city": "Demo City", "state": "Karnataka", "pinCode": "560001",
+  "occupation": "OTHER", "acceptTerms": true, "termsVersion": "2026-11-12" }
+```
+| Field | Rule |
+|---|---|
+| `dateOfBirth` | a real date `YYYY-MM-DD`; age 18–120 |
+| `phone` | Indian mobile number: 10 digits starting 6–9; `+91`, `0`, spaces and hyphens allowed – stored as `+91XXXXXXXXXX` |
+| `city` | 2–60 letters, spaces, `.`, `'`, `-` |
+| `state` | one of the 36 states / union territories from `requirements.states` |
+| `pinCode` | 6 digits, not starting with 0 |
+| `occupation` | one of `requirements.occupations` |
+| `acceptTerms` | must be `true` |
+| `termsVersion` | must equal the current `requirements.termsVersion` (the user accepted what they were shown) |
+
+Any other field (e.g. `"onboardingStatus": "APPROVED"`) → `400`, so nobody can approve themselves.
+
+**Response 200** – approved; `user` is the updated user, `onboarding` the same shape as GET (captured locally, `states` shortened)
+```json
+{ "user": { "id": "b6a1be4d-…", "email": "docs-onb-…@example.com", "fullName": "Docs Onboarding", "role": "ACCOUNT_HOLDER", "isActive": true,
+            "onboardingStatus": "APPROVED", "createdAt": "2026-11-12T09:16:47.924Z", "updatedAt": "2026-11-12T09:16:48.014Z" },
+  "onboarding": { "status": "APPROVED", "onboardedAt": "2026-11-12T09:16:48.011Z", "termsAcceptedVersion": "2026-11-12",
+                  "termsAcceptedAt": "2026-11-12T09:16:48.011Z",
+                  "profile": { "dateOfBirth": "1990-01-01", "phone": "+919000000000", "city": "Demo City", "state": "Karnataka",
+                               "pinCode": "560001", "occupation": "OTHER", "createdAt": "2026-11-12T09:16:48.013Z" },
+                  "requirements": { "…": "…" } } }
+```
+The audit log records `ONBOARDING_COMPLETE` with `{ "approval": "AUTOMATIC", "termsVersion": "2026-11-12" }` – no personal details.
+
+**Errors:** `400 VALIDATION_ERROR` with `details` per field, e.g.
+```json
+{ "error": { "code": "VALIDATION_ERROR", "message": "Validation failed", "details": [{ "field": "dateOfBirth", "message": "You must be at least 18 years old" }] } }
+```
+`409 ONBOARDING_ALREADY_COMPLETE` (also for simultaneous submissions – exactly one succeeds) · `403 FORBIDDEN` for admins/auditors ·
+`401 UNAUTHENTICATED`.
+
+---
+
 ## Accounts
 
 ### POST /accounts
 
 Opens a new account for the signed-in holder. Balance always starts at ₹0; the owner is always the caller.
-Maximum 5 accounts per user.
+Maximum 5 accounts per user. Requires completed [onboarding](#onboarding) (otherwise `403 ONBOARDING_INCOMPLETE`).
 
 **Request** `{}` (optional `{ "currency": "INR" }`; `balance`, `ownerId` etc. are rejected)
 

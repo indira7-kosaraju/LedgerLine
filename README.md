@@ -43,7 +43,8 @@ can be re-derived from the ledger at any time ("a ledger you can prove").
 ## 3. Features
 
 **Account holders**
-- Register and sign in (HttpOnly cookie session); open up to 5 accounts.
+- Register and sign in (HttpOnly cookie session), then a short **onboarding**: demo profile (date of birth 18+, mobile number,
+  city, state, PIN code, occupation) and the current terms – approved automatically. Only then: open up to 5 accounts.
 - Deposit (simulated), withdraw, and transfer to own accounts or any account number – with a confirmation step and a receipt.
 - Transaction history with search and filters; details that never reveal the other party's balance.
 - Statements with a **ledger proof** (credits − debits = balance).
@@ -61,11 +62,12 @@ can be re-derived from the ledger at any time ("a ledger you can prove").
 **Platform**
 - Double-entry ledger with database-enforced integrity; idempotent money movement; row-level locking.
 - Role-based access control checked on the server for every request; full audit trail including refusals.
+- Onboarding cannot be skipped: the API refuses accounts and money movement before approval, and so does the database (triggers).
 - Helmet, strict CORS, CSRF protection, input validation, safe error responses.
 - Rate limits in **Redis** (shared by all server instances, survive restarts): per IP, plus a per-account login lockout;
   sign-in fails closed (503) if Redis is down.
 - Liveness and readiness checks (`/api/health/live`, `/api/health/ready`: database, Redis, ledger protections, limited DB role).
-- 344 backend tests, 24 browser tests, 13 frontend unit tests.
+- 377 backend tests, 27 browser tests, 15 frontend unit tests.
 
 ## 4. Technology stack
 
@@ -266,12 +268,13 @@ Full reference with request bodies, real responses and error codes: **[docs/API.
 | GET | `/api/health` · `/api/health/live` · `/api/health/ready` | – | – |
 | POST | `/api/auth/register` · `/api/auth/login` | – | – |
 | GET | `/api/auth/me` | ✅ | any |
+| GET · POST | `/api/onboarding` | ✅ | ACCOUNT_HOLDER (own status / submit profile + terms) |
 | POST | `/api/auth/logout` | optional | any |
-| POST | `/api/accounts` | ✅ | ACCOUNT_HOLDER |
+| POST | `/api/accounts` | ✅ | ACCOUNT_HOLDER, onboarding complete |
 | GET | `/api/accounts` | ✅ | any (holders see their own) |
 | GET | `/api/accounts/:id` · `/:id/balance` · `/:id/statement` | ✅ | owner, ADMIN, AUDITOR |
 | PATCH | `/api/accounts/:id/status` | ✅ | ADMIN |
-| POST | `/api/transactions/deposit` · `/withdraw` · `/transfer` | ✅ + `Idempotency-Key` | ACCOUNT_HOLDER (own accounts) |
+| POST | `/api/transactions/deposit` · `/withdraw` · `/transfer` | ✅ + `Idempotency-Key` | ACCOUNT_HOLDER (own accounts, onboarding complete) |
 | GET | `/api/transactions` | ✅ | any (holders see their own) |
 | GET | `/api/transactions/:id` | ✅ | involved holder, ADMIN, AUDITOR |
 | GET | `/api/ledger/entries` · `/api/ledger/verify` | ✅ | ADMIN, AUDITOR |
@@ -356,11 +359,11 @@ and to the local Redis, database 1 (`redis://127.0.0.1:6379/1`).
 
 | Command (folder) | What it covers | Result |
 |---|---|---|
-| `npm test` (backend) | Jest + Supertest: auth, authorization, accounts, transactions, **financial integrity**, **idempotency**, **concurrency**, ledger tampering, security audit, rate limits **in Redis** (incl. Redis down), readiness, **first-admin bootstrap**, change password, database roles | 344 tests |
-| `npm test` (frontend) | amount parsing (no floating point), validation, error messages, idempotency keys | 13 tests |
-| `npm run test:e2e` (frontend) | Playwright in Chrome: registration, login, protected routes, roles, money forms, history, error handling, lost-response retry, change password | 24 tests |
-| `npm run smoke` (backend) | end-to-end API check against your running dev server | 56 checks |
-| `npm run verify:db` (backend) | read-only check of the real database (incl. "connected as a limited role") | 14 checks |
+| `npm test` (backend) | Jest + Supertest: auth, authorization, accounts, transactions, **financial integrity**, **idempotency**, **concurrency**, ledger tampering, security audit, rate limits **in Redis** (incl. Redis down), readiness, **first-admin bootstrap**, change password, database roles, **onboarding** | 377 tests |
+| `npm test` (frontend) | amount parsing (no floating point), validation (incl. onboarding), error messages, idempotency keys | 15 tests |
+| `npm run test:e2e` (frontend) | Playwright in Chrome: registration, login, protected routes, roles, money forms, history, error handling, lost-response retry, change password, onboarding | 27 tests |
+| `npm run smoke` (backend) | end-to-end API check against your running dev server | 61 checks |
+| `npm run verify:db` (backend) | read-only check of the real database (incl. "connected as a limited role", "every account owner onboarded") | 15 checks |
 
 One-time setup for the test database:
 
@@ -378,7 +381,8 @@ The test tools refuse to run against any database that is not named `ledgerline_
 
 **Vercel** (frontend) · **Render** (backend) · **Neon** (managed PostgreSQL). Step-by-step guide: **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**.
 
-**Live demo:** <https://ledger-line-umber.vercel.app> (verified 2026-11-12: 25/25 live checks, 14/14 database checks – see docs/DEPLOYMENT.md).
+**Live demo:** <https://ledger-line-umber.vercel.app> (verified 2026-11-12 after step 3: 25/25 live checks, 14/14 database checks, readiness
+all `ok` – see docs/DEPLOYMENT.md. Step 4 – onboarding – is not deployed yet).
 
 - `render.yaml` – Render Blueprint (build `npm ci --include=dev`, start `npm start` – migrations run from your computer, health check
   `/api/health/ready`, `REDIS_URL` from a Render Key Value instance).
@@ -386,7 +390,7 @@ The test tools refuse to run against any database that is not named `ledgerline_
   keeps working (`*.vercel.app` and `*.onrender.com` are different sites), SPA fallback, and security headers (CSP, HSTS, …).
 - `npm run db:prepare:production` – migrations, SYSTEM account, demo data and verification on the production database
   (reads only `backend/.env.production`; never copies your private admin).
-- `npm run verify:deployment -- <url>` – 25 end-to-end checks against the live site, including idempotency, the ₹800 + ₹700 race and that the public demo admin is disabled.
+- `npm run verify:deployment -- <url>` – 27 end-to-end checks against the live site, including onboarding, idempotency, the ₹800 + ₹700 race and that the public demo admin is disabled.
 
 The whole setup was rehearsed locally first: production build with the same headers and `/api` forwarding, backend started exactly
 like Render (clean install, `NODE_ENV=production`, no `.env`, empty database) – all 24 deployment checks of that version passed (2026-11-08).
@@ -404,6 +408,8 @@ Safe **dummy** accounts created by `npm run db:seed:demo` (reserved `example.com
 
 The demo seed creates 3 accounts and 6 transactions plus one refused withdrawal, all through the real transaction service, with
 fixed idempotency keys – running it again replays instead of duplicating. **Never use these credentials for real data.**
+The demo holders are already onboarded (with an obviously fake profile). A new registration goes through onboarding first –
+use made-up details such as date of birth `1990-01-01`, mobile `9000000000`, PIN code `560001`.
 
 **The demo admin exists only locally.** Its password is public, so it is never created on the deployed site
 (`db:prepare:production` sets `SEED_DEMO_ADMIN=false`), and an existing one is deactivated by the bootstrap below.
@@ -437,6 +443,7 @@ entry. Every user can change their password on the **Profile** page (other sessi
 ## 19. Limitations and future enhancements
 
 **Known limitations** (details in [THREATS.md](THREATS.md)):
+- Onboarding has no real identity check (KYC): any valid, made-up profile is approved automatically – never enter real personal data.
 - Whoever holds the database owner password can still disable the ledger triggers (the API itself runs as the limited `ledgerline_api`).
 - The per-account lockout can be triggered by anyone who knows an email address (10 wrong passwords lock it for up to 15 minutes);
   no CAPTCHA or MFA. If Redis is down, nobody can sign in until it is back (by design – fail closed).

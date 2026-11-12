@@ -4,6 +4,7 @@ const authenticate = require('../middleware/authenticate');
 const { requirePermission } = require('../middleware/authorize');
 const validate = require('../middleware/validate');
 const { requireIdempotencyKey } = require('../middleware/idempotency');
+const { requireOnboarded } = require('../middleware/requireOnboarded');
 const {
   depositSchema,
   withdrawSchema,
@@ -21,10 +22,11 @@ router.use(authenticate);
 // account is checked inside the service, on the locked database row.
 const canMove = requirePermission('transactions:create');
 
-// Order matters: role check → body validation → Idempotency-Key (fingerprint of the clean body).
+// Order matters: role check → onboarding finished → body validation → Idempotency-Key (fingerprint of the clean body).
 router.post(
   '/deposit',
   canMove,
+  requireOnboarded('TXN_DEPOSIT'),
   validate(depositSchema, 'body', { auditAction: 'TXN_DEPOSIT' }),
   requireIdempotencyKey('TXN_DEPOSIT'),
   transactionController.deposit
@@ -32,6 +34,7 @@ router.post(
 router.post(
   '/withdraw',
   canMove,
+  requireOnboarded('TXN_WITHDRAWAL'),
   validate(withdrawSchema, 'body', { auditAction: 'TXN_WITHDRAWAL' }),
   requireIdempotencyKey('TXN_WITHDRAWAL'),
   transactionController.withdraw
@@ -39,6 +42,7 @@ router.post(
 router.post(
   '/transfer',
   canMove,
+  requireOnboarded('TXN_TRANSFER'),
   validate(transferSchema, 'body', { auditAction: 'TXN_TRANSFER' }),
   requireIdempotencyKey('TXN_TRANSFER'),
   transactionController.transfer

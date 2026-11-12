@@ -73,6 +73,11 @@ async function main() {
   check('Exactly one SYSTEM account', system.n === 1, `${system.n} found`);
   const plaintext = await one(prisma.$queryRaw`SELECT COUNT(*)::int AS n FROM users WHERE "passwordHash" NOT LIKE '$2b$%'`);
   check('Every password is stored as a bcrypt hash', plaintext.n === 0, `${plaintext.n} not bcrypt`);
+  // Step 4: nobody holds a customer account without having completed onboarding.
+  const notOnboarded = await one(prisma.$queryRaw`
+    SELECT COUNT(*)::int AS n FROM accounts a JOIN users u ON u.id = a."ownerId"
+    WHERE a.type = 'CUSTOMER' AND u."onboardingStatus" <> 'APPROVED'`);
+  check('Every customer account belongs to an onboarded user', notOnboarded.n === 0, `${notOnboarded.n} accounts of users not onboarded`);
 
   // The app's role must not be able to change the schema or switch the triggers above off (scripts/setup-db-roles.js).
   const role = await one(prisma.$queryRaw`

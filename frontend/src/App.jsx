@@ -18,6 +18,8 @@ import MoneyMovementPage from './pages/MoneyMovementPage'
 import AdminUsersPage from './pages/AdminUsersPage'
 import LedgerPage from './pages/LedgerPage'
 import ProfilePage from './pages/ProfilePage'
+import OnboardingPage from './pages/OnboardingPage'
+import OnboardingGate from './components/routing/OnboardingGate'
 import ForbiddenPage from './pages/ForbiddenPage'
 import NotFoundPage from './pages/NotFoundPage'
 
@@ -40,9 +42,13 @@ export default function App() {
 
                 {/* Money movement: account holders only (UI guard – the backend enforces it too) */}
                 <Route element={<ProtectedRoute roles={['ACCOUNT_HOLDER']} />}>
-                  <Route path="deposit" element={<MoneyMovementPage key="deposit" type="DEPOSIT" />} />
-                  <Route path="withdraw" element={<MoneyMovementPage key="withdraw" type="WITHDRAWAL" />} />
-                  <Route path="transfer" element={<MoneyMovementPage key="transfer" type="TRANSFER" />} />
+                  <Route path="onboarding" element={<OnboardingPage />} />
+                  {/* …and only after onboarding (step 4) */}
+                  <Route element={<OnboardingGate />}>
+                    <Route path="deposit" element={<MoneyMovementPage key="deposit" type="DEPOSIT" />} />
+                    <Route path="withdraw" element={<MoneyMovementPage key="withdraw" type="WITHDRAWAL" />} />
+                    <Route path="transfer" element={<MoneyMovementPage key="transfer" type="TRANSFER" />} />
+                  </Route>
                 </Route>
 
                 {/* Admin + auditor only (UI guard – the backend enforces it too) */}

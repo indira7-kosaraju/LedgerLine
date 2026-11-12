@@ -14,6 +14,7 @@ const publicUserFields = {
   fullName: true,
   role: true,
   isActive: true,
+  onboardingStatus: true,
   createdAt: true,
   updatedAt: true,
 };

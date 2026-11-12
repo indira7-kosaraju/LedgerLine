@@ -7,6 +7,7 @@ const app = require('../src/app');
 const prisma = require('../src/config/prisma');
 const { signAccessToken } = require('../src/utils/jwt');
 const { PrismaClient } = require('@prisma/client');
+const { TERMS_VERSION } = require('../src/config/onboarding');
 
 // The app (and `prisma` above) connects as the limited API role, which cannot create triggers or
 // touch history. Tests that inject faults or attack the tables directly use the table OWNER.
@@ -17,12 +18,31 @@ const disconnectAll = () => Promise.all([prisma.$disconnect(), ownerClient?.$dis
 const PASSWORD_HASH = bcrypt.hashSync('Secret123', 10);
 const newKey = () => crypto.randomUUID();
 
+// A valid onboarding submission (step 4) – demo data, also used by onboarding.test.js.
+const TEST_PROFILE = Object.freeze({
+  dateOfBirth: '1990-05-20', phone: '9876543210', city: 'Bengaluru', state: 'Karnataka', pinCode: '560001', occupation: 'SALARIED',
+  acceptTerms: true, termsVersion: TERMS_VERSION,
+});
+
 // Creates a user directly in the DB (avoids the registration rate limit) and returns
-// a ready-to-use Bearer token.
-async function createUser(role = 'ACCOUNT_HOLDER') {
-  const user = await prisma.user.create({
-    data: { email: `${role.toLowerCase()}-${crypto.randomUUID()}@test.local`, passwordHash: PASSWORD_HASH, fullName: `Test ${role}`, role },
-  });
+// a ready-to-use Bearer token. Account holders are onboarded (approved) unless { onboarded: false }.
+async function createUser(role = 'ACCOUNT_HOLDER', { onboarded = true } = {}) {
+  const data = { email: `${role.toLowerCase()}-${crypto.randomUUID()}@test.local`, passwordHash: PASSWORD_HASH, fullName: `Test ${role}`, role };
+  let user;
+  if (role !== 'ACCOUNT_HOLDER') {
+    user = await prisma.user.create({ data: { ...data, onboardingStatus: 'APPROVED', onboardedAt: new Date() } });
+  } else if (!onboarded) {
+    user = await prisma.user.create({ data });
+  } else {
+    user = await prisma.$transaction(async (tx) => {
+      const created = await tx.user.create({ data });
+      await tx.customerProfile.create({
+        data: { userId: created.id, dateOfBirth: new Date('1990-05-20T00:00:00Z'), phone: '+919876543210', city: 'Bengaluru', state: 'Karnataka', pinCode: '560001', occupation: 'SALARIED' },
+      });
+      const now = new Date();
+      return tx.user.update({ where: { id: created.id }, data: { onboardingStatus: 'APPROVED', onboardedAt: now, termsVersion: TERMS_VERSION, termsAcceptedAt: now } });
+    });
+  }
   return { user, token: signAccessToken(user), auth: { Authorization: `Bearer ${signAccessToken(user)}` } };
 }
 
@@ -57,4 +77,4 @@ async function verifyLedger() {
   return res.body;
 }
 
-module.exports = { app, prisma, ownerDb, disconnectAll, request, newKey, createUser, createAccount, deposit, withdraw, transfer, balanceOf, countTransactions, verifyLedger };
+module.exports = { app, prisma, ownerDb, disconnectAll, request, newKey, createUser, TEST_PROFILE, createAccount, deposit, withdraw, transfer, balanceOf, countTransactions, verifyLedger };

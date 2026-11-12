@@ -24,6 +24,24 @@ enum Role {
   AUDITOR
 }
 
+// Step 4 – onboarding. Self-registered account holders start at PENDING_PROFILE and are approved
+// automatically once a valid profile and the current terms are submitted. Until then they can sign in
+// but cannot open accounts (enforced by the API AND by the trigger accounts_owner_onboarded).
+enum OnboardingStatus {
+  PENDING_PROFILE
+  APPROVED
+}
+
+enum Occupation {
+  SALARIED
+  SELF_EMPLOYED
+  BUSINESS_OWNER
+  STUDENT
+  HOMEMAKER
+  RETIRED
+  OTHER
+}
+
 enum AccountType {
   CUSTOMER // belongs to a user, can never go negative
   SYSTEM // represents money outside LedgerLine (deposits come from here, withdrawals go here)
@@ -78,6 +96,13 @@ model User {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
+  // Onboarding (step 4). Users that existed before step 4 were marked APPROVED by the migration.
+  onboardingStatus OnboardingStatus @default(PENDING_PROFILE)
+  onboardedAt      DateTime?
+  termsVersion     String?
+  termsAcceptedAt  DateTime?
+
+  profile         CustomerProfile?
   accounts        Account[]
   transactions    Transaction[]    @relation("InitiatedBy")
   idempotencyKeys IdempotencyKey[]
@@ -202,4 +227,20 @@ model AuditLog {
   @@index([action, createdAt])
   @@index([entityType, entityId])
   @@map("audit_logs")
+}
+
+// Personal details submitted during onboarding (step 4) – DEMO DATA ONLY, users are told not to enter real
+// information. One row per account holder; the API role may only read and insert it (no UPDATE/DELETE).
+model CustomerProfile {
+  userId      String     @id @db.Uuid
+  user        User       @relation(fields: [userId], references: [id])
+  dateOfBirth DateTime   @db.Date
+  phone       String // normalised to +91XXXXXXXXXX
+  city        String
+  state       String // an Indian state or union territory (validated by the API)
+  pinCode     String
+  occupation  Occupation
+  createdAt   DateTime   @default(now())
+
+  @@map("customer_profiles")
 }

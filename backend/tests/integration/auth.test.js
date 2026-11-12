@@ -1,7 +1,7 @@
 // Authentication: registration, login, sessions (HttpOnly cookie / Bearer), CSRF, tokens.
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
-const { app, prisma, request, createUser } = require('../helpers');
+const { app, prisma, request, createUser, TEST_PROFILE } = require('../helpers');
 
 afterAll(() => prisma.$disconnect());
 
@@ -91,7 +91,7 @@ describe('Login and session', () => {
   test('GET /me returns the profile and never the password hash', async () => {
     const cookie = sessionCookie(await login(email, PASSWORD)).split(';')[0];
     const me = await request(app).get('/api/auth/me').set('Cookie', cookie);
-    expect(Object.keys(me.body.user).sort()).toEqual(['createdAt', 'email', 'fullName', 'id', 'isActive', 'role', 'updatedAt']);
+    expect(Object.keys(me.body.user).sort()).toEqual(['createdAt', 'email', 'fullName', 'id', 'isActive', 'onboardingStatus', 'role', 'updatedAt']);
   });
 
   test('a deactivated user cannot log in – same generic 401, real reason only in the audit log', async () => {
@@ -185,6 +185,8 @@ describe('CSRF protection for cookie sessions', () => {
     const email = uniqueEmail();
     const res = await register({ email, password: PASSWORD, fullName: 'Csrf Test' });
     cookie = sessionCookie(res).split(';')[0];
+    // Onboarding (step 4) – otherwise opening an account is refused for that reason, not for CSRF.
+    await request(app).post('/api/onboarding').set('Cookie', cookie).set('X-Requested-With', 'XMLHttpRequest').send(TEST_PROFILE).expect(200);
   });
 
   test('cookie + POST without X-Requested-With → 403 CSRF_REJECTED (audited)', async () => {

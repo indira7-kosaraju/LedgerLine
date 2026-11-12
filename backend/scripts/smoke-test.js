@@ -70,6 +70,16 @@ async function main() {
   check('wrong password → 401', (await call('POST', '/auth/login', null, { email: `sender${run}@smoke.test`, password: 'Wrong123x' })).status === 401);
   let sender = login.body.token;
   const receiver = reg2.body.token;
+
+  section('Step 4 – Onboarding');
+  check('new user starts at PENDING_PROFILE', reg1.body?.user?.onboardingStatus === 'PENDING_PROFILE');
+  check('account before onboarding → 403', (await call('POST', '/accounts', sender, {})).body?.error?.code === 'ONBOARDING_INCOMPLETE');
+  const termsVersion = (await call('GET', '/onboarding', sender)).body?.onboarding?.requirements?.termsVersion;
+  check('under 18 → 400', (await call('POST', '/onboarding', sender, { ...{ dateOfBirth: '1990-01-01', phone: '9000000000', city: 'Demo City', state: 'Karnataka', pinCode: '560001', occupation: 'OTHER', acceptTerms: true, termsVersion }, dateOfBirth: '2020-01-01' })).status === 400);
+  for (const token of [sender, receiver]) {
+    const done = await call('POST', '/onboarding', token, { dateOfBirth: '1990-01-01', phone: '9000000000', city: 'Demo City', state: 'Karnataka', pinCode: '560001', occupation: 'OTHER', acceptTerms: true, termsVersion });
+    check('onboarding → APPROVED', done.status === 200 && done.body?.user?.onboardingStatus === 'APPROVED');
+  }
   check('GET /auth/me with token → 200', (await call('GET', '/auth/me', sender)).status === 200);
   check('GET /auth/me without token → 401', (await call('GET', '/auth/me')).status === 401);
   check('GET /auth/me with tampered token → 401', (await call('GET', '/auth/me', `${sender}x`)).status === 401);

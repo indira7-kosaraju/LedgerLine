@@ -29,11 +29,27 @@ const DEMO_USERS = [
 const includeDemoAdmin = process.env.SEED_DEMO_ADMIN !== 'false';
 const seededUsers = DEMO_USERS.filter((u) => u.role !== 'ADMIN' || includeDemoAdmin);
 
+// Demo holders go through onboarding like everyone else (with an obviously fake profile), because the
+// database refuses accounts for holders who are not approved. Staff need no onboarding.
+const DEMO_PROFILE = { dateOfBirth: new Date('1990-01-01T00:00:00Z'), phone: '+919000000000', city: 'Demo City', state: 'Karnataka', pinCode: '560001', occupation: 'OTHER' };
+const { TERMS_VERSION } = require('../src/config/onboarding');
+
 async function ensureUser({ email, fullName, role }) {
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) return existing;
   const passwordHash = await bcrypt.hash(DEMO_PASSWORD, Number(process.env.BCRYPT_SALT_ROUNDS) || 12);
-  return prisma.user.create({ data: { email, fullName, role, passwordHash } });
+  const now = new Date();
+  if (role !== 'ACCOUNT_HOLDER') {
+    return prisma.user.create({ data: { email, fullName, role, passwordHash, onboardingStatus: 'APPROVED', onboardedAt: now } });
+  }
+  return prisma.$transaction(async (tx) => {
+    const user = await tx.user.create({ data: { email, fullName, role, passwordHash } });
+    await tx.customerProfile.create({ data: { userId: user.id, ...DEMO_PROFILE } });
+    return tx.user.update({
+      where: { id: user.id },
+      data: { onboardingStatus: 'APPROVED', onboardedAt: now, termsVersion: TERMS_VERSION, termsAcceptedAt: now },
+    });
+  });
 }
 
 async function ensureAccounts(user, count) {

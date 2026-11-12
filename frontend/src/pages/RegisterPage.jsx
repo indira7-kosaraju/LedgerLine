@@ -37,8 +37,8 @@ export default function RegisterPage() {
     try {
       // confirmPassword is only checked here – the backend rejects unknown fields.
       const user = await register({ fullName: values.fullName.trim(), email: values.email.trim(), password: values.password })
-      toast.success(`Account created. Welcome to LedgerLine, ${user.fullName}!`)
-      // <GuestRoute> redirects to the app now that we're signed in.
+      toast.success(`Welcome to LedgerLine, ${user.fullName}! One more step: complete your onboarding.`)
+      // <GuestRoute> redirects to /onboarding now that we're signed in.
     } catch (error) {
       if (error.code === 'EMAIL_TAKEN') {
         setErrors({ email: error.message })
@@ -53,7 +53,7 @@ export default function RegisterPage() {
   return (
     <AuthCard
       title="Create your account"
-      subtitle="Start moving simulated money in minutes."
+      subtitle="Create your sign-in, then complete a short onboarding to open accounts."
       footer={
         <>
           Already have an account?{' '}
