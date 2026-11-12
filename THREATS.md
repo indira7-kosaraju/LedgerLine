@@ -262,8 +262,10 @@ trigger. Migrations and role setup use the table **owner** through a separate `D
   messages). The tamper tests in `ledgerSecurity.test.js` run as the **owner** (layer 2).
 
 **Remaining accepted risks.**
-- ⚠️ **Production is not switched over yet** (2026-11-11): the live API still connects as Neon's owner role until the production steps
-  in `docs/DEPLOYMENT.md` are carried out. Locally and in all tests the API already runs as `ledgerline_api`.
+- **Production is switched over (verified 2026-11-12):** Render's `DATABASE_URL` uses `ledgerline_api` through Neon's pooler. Read-only
+  checks on Neon: the only app connection is `ledgerline_api`, and as that role PostgreSQL refused disabling the append-only trigger,
+  DELETE on ledger entries and audit logs, UPDATE on transactions, reading `_prisma_migrations` and CREATE TABLE. `verify-db` (14 checks,
+  including "connected as a limited role") and the 25 live checks against https://ledger-line-umber.vercel.app all passed.
 - Whoever has the **owner** password (`DIRECT_DATABASE_URL`, kept only on the operator's computer) can still disable the triggers.
 - A database superuser or host compromise is out of scope.
 
@@ -413,7 +415,7 @@ Behind a hosting proxy, `TRUST_PROXY` makes the limit apply to the real client I
 
 ## All remaining accepted risks
 
-1. Production still runs as the database owner until the role switch in docs/DEPLOYMENT.md is done; the owner password itself can disable triggers (threat 8).
+1. Whoever holds the database owner password (kept only on the operator's computer, never on Render) can still disable the triggers (threat 8).
 2. Rate limits are in memory and per IP; no per-account lockout, CAPTCHA or MFA (threat 13).
 3. Stolen tokens stay valid for up to 1 hour unless the owner logs out (threat 12); logout signs out all devices.
 4. Idempotency keys expire after 24 hours and are not cleaned up by a job (threat 1).

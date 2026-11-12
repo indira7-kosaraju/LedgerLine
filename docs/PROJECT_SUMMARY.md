@@ -123,14 +123,19 @@ The lesson: AI output has to be proven by tests and by the real running system, 
 
 ## What is not finished
 
-**Verified on the live deployment (2026-11-11):**
-- The Render backend is up, and `/api/health` reports the database as `ok`.
-- A demo login against the backend returns 200.
+**Verified on the live deployment (2026-11-12):**
+- Frontend https://ledger-line-umber.vercel.app, backend https://ledgerline-z5o2.onrender.com, database on Neon.
+- `/api/health` returns 200 with the database `ok`, directly and through Vercel's `/api` rewrite.
+- The API runs as the limited `ledgerline_api` role: it is the only app connection on Neon, and as that role PostgreSQL refuses disabling
+  triggers, deleting or rewriting history, and schema changes.
+- `verify-db`: 14 of 14 database checks passed (money conserved, ledger consistent, triggers and constraints installed, limited role).
+- `verify-deployment`: 25 of 25 live checks passed – security headers, logins and roles, the secure cookie, deposit, withdrawal,
+  transfer, history, idempotency (replay, 5 simultaneous duplicates, reused key), the concurrent-withdrawal race and a balanced ledger.
+- The public demo admin is disabled; the real first admin was created with `admin:bootstrap`.
 
 **Not verified yet:**
-- **The live frontend.** The Vercel URL has not been confirmed, and the 25-check `verify-deployment.js` has not been run against the
-  live HTTPS site.
-- **Browser testing of the deployed app:**
+- **A readiness endpoint** – planned for step 3 (Redis rate limiting and readiness checks).
+- **A manual browser walkthrough of the deployed app** (the automated checks above cover the API behind it):
   - login
   - deposit, withdrawal and transfer
   - history
@@ -138,8 +143,8 @@ The lesson: AI output has to be proven by tests and by the real running system, 
   - the concurrency race
 - **Accepted limitations** (see THREATS.md):
   - Rate limits are kept in memory, per IP. There is no per-account lockout and no MFA.
-  - The API now runs as a limited database role locally and in all tests; the live site is switched over only after the
-    production steps in DEPLOYMENT.md. Whoever holds the owner password can still disable the ledger triggers.
+  - The API runs as a limited database role, locally and on the live site. Whoever holds the owner password (kept only on the
+    operator's computer) can still disable the ledger triggers.
   - Render's free plan sleeps when idle, so the first request after a pause is slow.
 - There is no independent penetration test.
 

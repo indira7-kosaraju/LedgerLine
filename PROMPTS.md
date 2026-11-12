@@ -778,7 +778,22 @@ refused the old `.env.production` without connecting. Fix 5: 10 new tests; mutat
 removed → 1, plain text never chosen → 3, sslmode check removed → 1). Local PostgreSQL uses "trust" authentication, so password checks
 can't be tested there; checked once by hand as superuser with a temporary role: in plain-text mode PostgreSQL stored a SCRAM hash (not
 the password), the new password verified against it and the previous one did not – also on re-runs (ALTER ROLE). Fix 6: a test that slows the role transaction to 6 s still commits with exactly the planned
-privileges; with the limit removed it fails with "The timeout for this transaction was 5000 ms". **Not done:** anything on Neon or Render (waiting for my approval).
+privileges; with the limit removed it fails with "The timeout for this transaction was 5000 ms".
+
+**Production (2026-11-12, each step approved separately):**
+- P1: `backend/.env.production` rewritten with the two URLs (API role on the pooled host with `pgbouncer=true&connection_limit=5`,
+  owner on the direct host); an offline checker passed 15/15 without connecting or printing secrets.
+- P2: `npm run db:roles -- --production` – failed twice (fixes 5 and 6, nothing was created either time, checked read-only), then
+  succeeded: the role transaction took 4.0 s on Neon, all 7 tables and the role attributes ✅. Checked as `ledgerline_api`: login
+  through the pooler works, data readable, the bootstrapped admin is still the only active admin, 6 dangerous statements refused.
+- P3 (done by me): Render `DATABASE_URL` switched to `ledgerline_api`, start command `npm start`, code pushed and deployed.
+- P4: `/api/health` 200 with database `ok`; on Neon the only app connection is `ledgerline_api` (via pgbouncer); demo admin still
+  disabled, my admin still active; `verify-db` 14/14 as `ledgerline_api` (before and after the live run); frontend
+  https://ledger-line-umber.vercel.app – HTTPS, CSP/HSTS/nosniff/X-Frame-Options, SPA deep link, `/api` rewrite, http→https 308,
+  401 without login; `verify-deployment` **25/25** (deposit, withdrawal, transfer, history, idempotent replay and 5 simultaneous
+  duplicates, reused key → 422, the ₹800 + ₹700 race → 201 + 422, ledger verified, balances sum to ₹0). The live run permanently added
+  1 test user, 3 accounts and 6 transactions (simulated money; the ledger is append-only).
+- **Not done:** a readiness endpoint (planned for step 3); my own browser walkthrough of the live site.
 
 **Related commit:** `security: run the API as a limited database role`
 
