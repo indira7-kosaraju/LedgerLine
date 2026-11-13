@@ -51,26 +51,32 @@ export default function PublicLayout() {
   const location = useLocation()
   // The sign-in and registration cards show the large brand mark themselves.
   const authPage = ['/login', '/register'].includes(location.pathname)
+  // The homepage brings its own header (section navigation) and simulated-money notice.
+  const homePage = location.pathname === '/'
   return (
     <div className="flex min-h-screen flex-col bg-canvas">
-      <header className="border-b border-line-soft bg-canvas/85 backdrop-blur">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
-          {authPage ? (
-            <Link to="/" className="text-sm font-medium text-ink-2 hover:text-gold-soft">
-              ← Home
-            </Link>
-          ) : (
-            <Link to="/" aria-label="LedgerLine home">
-              <Logo />
-            </Link>
-          )}
-          <HeaderActions />
-        </div>
-      </header>
+      {!homePage && (
+        <>
+          <header className="border-b border-line-soft bg-canvas/85 backdrop-blur">
+            <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
+              {authPage ? (
+                <Link to="/" className="text-sm font-medium text-ink-2 hover:text-gold-soft">
+                  ← Home
+                </Link>
+              ) : (
+                <Link to="/" aria-label="LedgerLine home">
+                  <Logo />
+                </Link>
+              )}
+              <HeaderActions />
+            </div>
+          </header>
 
-      <div className="border-b border-gold-deep/40 bg-gold-dark/40 px-4 py-2 text-center text-xs font-medium text-gold-soft">
-        Simulated money only – no real bank is connected.
-      </div>
+          <div className="border-b border-gold-deep/40 bg-gold-dark/40 px-4 py-2 text-center text-xs font-medium text-gold-soft">
+            Simulated money only – no real bank is connected.
+          </div>
+        </>
+      )}
 
       <main className="flex-1">
         <ErrorBoundary key={location.pathname}>
@@ -79,9 +85,7 @@ export default function PublicLayout() {
       </main>
 
       <footer className="border-t border-line-soft bg-sidebar">
-        <div className="mx-auto max-w-6xl px-4 py-6 text-sm text-ink-3 sm:px-6">
-          LedgerLine is a learning project. No real money moves.
-        </div>
+        <div className="mx-auto max-w-6xl px-4 py-6 text-sm text-ink-3 sm:px-6">LedgerLine is a learning project. No real money moves.</div>
       </footer>
     </div>
   )
