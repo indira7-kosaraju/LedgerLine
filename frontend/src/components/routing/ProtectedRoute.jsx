@@ -19,6 +19,12 @@ export default function ProtectedRoute({ roles }) {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />
   }
 
+  // A temporary password (staff created by an admin) must be changed first – the backend refuses
+  // everything else with 403 PASSWORD_CHANGE_REQUIRED anyway.
+  if (user.mustChangePassword && location.pathname !== '/profile') {
+    return <Navigate to="/profile" replace />
+  }
+
   if (roles && !roles.includes(user.role)) {
     return <Navigate to="/forbidden" replace />
   }

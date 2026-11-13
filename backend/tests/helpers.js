@@ -16,6 +16,9 @@ const ownerDb = () => (ownerClient ??= new PrismaClient({ datasources: { db: { u
 const disconnectAll = () => Promise.all([prisma.$disconnect(), ownerClient?.$disconnect()]);
 
 const PASSWORD_HASH = bcrypt.hashSync('Secret123', 10);
+
+// JSON.stringify for database rows: audit records carry a BigInt (chainSeq, step 6).
+const toJson = (value) => JSON.stringify(value, (key, v) => (typeof v === 'bigint' ? v.toString() : v));
 const newKey = () => crypto.randomUUID();
 
 // A valid onboarding submission (step 4) – demo data, also used by onboarding.test.js.
@@ -77,4 +80,4 @@ async function verifyLedger() {
   return res.body;
 }
 
-module.exports = { app, prisma, ownerDb, disconnectAll, request, newKey, createUser, TEST_PROFILE, createAccount, deposit, withdraw, transfer, balanceOf, countTransactions, verifyLedger };
+module.exports = { app, prisma, ownerDb, disconnectAll, request, newKey, createUser, TEST_PROFILE, toJson, createAccount, deposit, withdraw, transfer, balanceOf, countTransactions, verifyLedger };

@@ -1,18 +1,27 @@
 // First-admin bootstrap: npm run admin:bootstrap (scripts/bootstrap-admin.js + adminBootstrap.service.js).
 //
-// The rule "only if no active admin exists" needs a database WITHOUT active admins, so every
-// test starts by deactivating all admins; afterAll restores exactly the admins that were active
+// The rule "only if no active admin exists" needs a database WITHOUT active admins (like a fresh installation),
+// so every test starts by deactivating all admins; afterAll restores exactly the admins that were active
 // before (test files run one after another, see jest.config.js).
+// Since step 5 the database refuses to leave no active admin (trigger users_keep_one_active_admin), so ONLY this
+// setup step switches that guard off for a moment, as the table owner – the bootstrap itself runs with it ON.
 const path = require('path');
 const crypto = require('crypto');
 const { spawnSync } = require('child_process');
-const { app, prisma, request, createUser } = require('../helpers');
+const { app, prisma, ownerDb, request, createUser, toJson } = require('../helpers');
 const { bootstrapFirstAdmin, DEMO_ADMIN_EMAIL } = require('../../src/services/adminBootstrap.service');
 
 const PASSWORD = 'FirstAdmin123';
 const uniqueEmail = () => `boot-${crypto.randomUUID()}@test.local`;
 const activeAdminCount = () => prisma.user.count({ where: { role: 'ADMIN', isActive: true } });
-const deactivateAllAdmins = () => prisma.user.updateMany({ where: { role: 'ADMIN', isActive: true }, data: { isActive: false } });
+async function deactivateAllAdmins() {
+  await ownerDb().$executeRawUnsafe('ALTER TABLE users DISABLE TRIGGER users_keep_one_active_admin');
+  try {
+    await prisma.user.updateMany({ where: { role: 'ADMIN', isActive: true }, data: { isActive: false } });
+  } finally {
+    await ownerDb().$executeRawUnsafe('ALTER TABLE users ENABLE TRIGGER users_keep_one_active_admin');
+  }
+}
 
 let originallyActive;
 beforeAll(async () => {
@@ -20,9 +29,11 @@ beforeAll(async () => {
 });
 beforeEach(deactivateAllAdmins);
 afterAll(async () => {
-  await deactivateAllAdmins();
+  // First bring the original admins back, then switch off the ones the tests created (always one active admin).
   await prisma.user.updateMany({ where: { id: { in: originallyActive } }, data: { isActive: true } });
+  await prisma.user.updateMany({ where: { role: 'ADMIN', isActive: true, id: { notIn: originallyActive } }, data: { isActive: false } });
   await prisma.$disconnect();
+  await ownerDb().$disconnect();
 });
 
 describe('bootstrapFirstAdmin', () => {
@@ -38,7 +49,7 @@ describe('bootstrapFirstAdmin', () => {
 
     const entry = await prisma.auditLog.findFirst({ where: { action: 'ADMIN_BOOTSTRAP', outcome: 'SUCCESS', entityId: admin.id } });
     expect(entry).not.toBeNull();
-    expect(JSON.stringify(entry)).not.toContain(PASSWORD);
+    expect(toJson(entry)).not.toContain(PASSWORD);
 
     const res = await request(app).post('/api/auth/login').send({ email, password: PASSWORD });
     expect(res.status).toBe(200);

@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { PASSWORD_RULES, fieldErrorsFromApi, normalisePhone, validateChangePassword, validateLogin, validateOnboardingDetails, validateRegister } from '../../src/utils/validation.js'
+import { PASSWORD_RULES, fieldErrorsFromApi, normalisePhone, validateChangePassword, validateLogin, validateOnboardingDetails, validateRegister, validateStaff } from '../../src/utils/validation.js'
 
 const valid = { fullName: 'Asha Rao', email: 'asha@example.com', password: 'Secret123', confirmPassword: 'Secret123' }
 
@@ -65,4 +65,10 @@ test('onboarding: under 18, impossible dates, bad phone, PIN, state, occupation 
   assert.deepEqual(Object.keys(errors).sort(), ['city', 'dateOfBirth', 'occupation', 'phone', 'pinCode', 'state'])
   assert.match(errors.dateOfBirth, /at least 18/)
   assert.equal(validateOnboardingDetails({ ...GOOD, dateOfBirth: '2001-02-30' }, REQUIREMENTS).dateOfBirth, 'Enter a valid date')
+})
+
+test('staff form: only ADMIN or AUDITOR, and the admin must confirm with their password', () => {
+  assert.deepEqual(validateStaff({ fullName: 'New Auditor', email: 'new@example.com', role: 'AUDITOR', currentPassword: 'x' }), {})
+  const errors = validateStaff({ fullName: 'A', email: 'nope', role: 'ACCOUNT_HOLDER', currentPassword: '' })
+  assert.deepEqual(Object.keys(errors).sort(), ['currentPassword', 'email', 'fullName', 'role'])
 })

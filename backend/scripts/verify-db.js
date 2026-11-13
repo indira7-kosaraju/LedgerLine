@@ -78,6 +78,15 @@ async function main() {
     SELECT COUNT(*)::int AS n FROM accounts a JOIN users u ON u.id = a."ownerId"
     WHERE a.type = 'CUSTOMER' AND u."onboardingStatus" <> 'APPROVED'`);
   check('Every customer account belongs to an onboarded user', notOnboarded.n === 0, `${notOnboarded.n} accounts of users not onboarded`);
+  // Step 5: staff (ADMIN/AUDITOR) never hold customer accounts – separation of duties.
+  const staffAccounts = await one(prisma.$queryRaw`
+    SELECT COUNT(*)::int AS n FROM accounts a JOIN users u ON u.id = a."ownerId"
+    WHERE a.type = 'CUSTOMER' AND u.role <> 'ACCOUNT_HOLDER'`);
+  check('No staff member owns a customer account', staffAccounts.n === 0, `${staffAccounts.n} accounts owned by staff`);
+  // Step 6: the tamper-evident audit trail – every record follows, links to and still hashes like when it was written.
+  const chainProblems = await prisma.$queryRaw`SELECT "chainSeq", problem FROM audit_chain_problems(3)`;
+  check('Audit trail hash chain intact (no record changed, removed or reordered)', chainProblems.length === 0,
+    chainProblems.map((p) => `#${p.chainSeq}: ${p.problem}`).join('; '));
 
   // The app's role must not be able to change the schema or switch the triggers above off (scripts/setup-db-roles.js).
   const role = await one(prisma.$queryRaw`

@@ -91,7 +91,7 @@ describe('Login and session', () => {
   test('GET /me returns the profile and never the password hash', async () => {
     const cookie = sessionCookie(await login(email, PASSWORD)).split(';')[0];
     const me = await request(app).get('/api/auth/me').set('Cookie', cookie);
-    expect(Object.keys(me.body.user).sort()).toEqual(['createdAt', 'email', 'fullName', 'id', 'isActive', 'onboardingStatus', 'role', 'updatedAt']);
+    expect(Object.keys(me.body.user).sort()).toEqual(['createdAt', 'email', 'fullName', 'id', 'isActive', 'mustChangePassword', 'onboardingStatus', 'role', 'updatedAt']);
   });
 
   test('a deactivated user cannot log in – same generic 401, real reason only in the audit log', async () => {

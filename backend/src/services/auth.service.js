@@ -4,6 +4,7 @@ const { Prisma } = require('@prisma/client');
 const prisma = require('../config/prisma');
 const env = require('../config/env');
 const AppError = require('../utils/AppError');
+const { passwordContainsEmail } = require('../utils/schemas/auth.schemas');
 const { signAccessToken } = require('../utils/jwt');
 const audit = require('./audit.service');
 
@@ -15,6 +16,7 @@ const publicUserFields = {
   role: true,
   isActive: true,
   onboardingStatus: true,
+  mustChangePassword: true,
   createdAt: true,
   updatedAt: true,
 };
@@ -100,10 +102,15 @@ async function changePassword(userId, { currentPassword, newPassword }, ctx) {
     ]);
   }
 
+  if (passwordContainsEmail(newPassword, user.email)) {
+    throw new AppError(400, 'Validation failed', 'VALIDATION_ERROR', [{ field: 'newPassword', message: 'Password must not contain your email address' }]);
+  }
+
   const passwordHash = await bcrypt.hash(newPassword, env.BCRYPT_SALT_ROUNDS);
   const updated = await prisma.user.update({
     where: { id: user.id },
-    data: { passwordHash, sessionVersion: { increment: 1 } },
+    // A temporary password (staff created by an admin, step 5) is replaced now – the restriction ends.
+    data: { passwordHash, sessionVersion: { increment: 1 }, mustChangePassword: false },
     select: { ...publicUserFields, sessionVersion: true },
   });
 

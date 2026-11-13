@@ -1,7 +1,7 @@
 // Step 4 – registration and onboarding. New account holders start at PENDING_PROFILE; a valid (demo) profile and
 // the current terms approve them automatically. Until then the API AND the database refuse accounts and money movement.
 const crypto = require('crypto');
-const { app, prisma, ownerDb, disconnectAll, request, newKey, createUser, TEST_PROFILE } = require('../helpers');
+const { app, prisma, ownerDb, disconnectAll, request, newKey, createUser, TEST_PROFILE, toJson } = require('../helpers');
 const { TERMS_VERSION } = require('../../src/config/onboarding');
 
 afterAll(disconnectAll);
@@ -70,7 +70,7 @@ describe('a valid profile + terms → approved automatically', () => {
 
     const entry = await prisma.auditLog.findFirst({ where: { actorId: holder.user.id, action: 'ONBOARDING_COMPLETE', outcome: 'SUCCESS' } });
     expect(entry.metadata).toEqual({ approval: 'AUTOMATIC', termsVersion: TERMS_VERSION });
-    expect(JSON.stringify(entry)).not.toMatch(/9876543210|1990-05-20|560001|Delhi/);
+    expect(toJson(entry)).not.toMatch(/9876543210|1990-05-20|560001|Delhi/);
 
     const account = await request(app).post('/api/accounts').set(holder.auth).send({});
     expect(account.status).toBe(201);

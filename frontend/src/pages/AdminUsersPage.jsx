@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router'
 import { useAuth } from '../hooks/useAuth'
 import { useApi } from '../hooks/useApi'
 import { useToast } from '../hooks/useToast'
@@ -25,6 +26,11 @@ const ROLE_OPTIONS = [
   { value: 'ADMIN', label: 'Administrators' },
   { value: 'AUDITOR', label: 'Auditors' },
 ]
+const ONBOARDING_OPTIONS = [
+  { value: '', label: 'Any onboarding' },
+  { value: 'PENDING_PROFILE', label: 'Onboarding pending' },
+  { value: 'APPROVED', label: 'Onboarded' },
+]
 const STATUS_OPTIONS = [
   { value: '', label: 'All statuses' },
   { value: 'ACTIVE', label: 'Active' },
@@ -40,18 +46,21 @@ export default function AdminUsersPage() {
   const role = get('role')
   const status = get('status')
   const q = get('q')
+  const onboarding = get('onboarding')
   const [search, setSearch] = useState(q)
   const [pending, setPending] = useState(null) // the user whose status is being changed
+  const [reason, setReason] = useState('')
   const [saving, setSaving] = useState(false)
 
-  const users = useApi((opts) => listUsers({ page, limit: LIMIT, role, status, q }, opts), [page, role, status, q])
+  const users = useApi((opts) => listUsers({ page, limit: LIMIT, role, status, onboarding, q }, opts), [page, role, status, onboarding, q])
 
   async function confirmChange() {
     setSaving(true)
     try {
-      const updated = await updateUserStatus(pending.id, !pending.isActive)
+      const updated = await updateUserStatus(pending.id, !pending.isActive, reason.trim())
       toast.success(`${updated.fullName} is now ${updated.isActive ? 'active' : 'deactivated'}.`)
       setPending(null)
+      setReason('')
       users.reload()
     } catch (error) {
       toast.error(error.message)
@@ -66,9 +75,10 @@ export default function AdminUsersPage() {
       header: 'User',
       render: (u) => (
         <div>
-          <p className="font-medium text-slate-900">
-            {u.fullName} {u.id === me.id && <span className="text-xs font-normal text-slate-500">(you)</span>}
-          </p>
+          <Link to={`/admin/users/${u.id}`} className="font-medium text-slate-900 hover:text-brand-700">
+            {u.fullName}
+          </Link>{' '}
+          {u.id === me.id && <span className="text-xs font-normal text-slate-500">(you)</span>}
           <p className="text-xs text-slate-500">{u.email}</p>
         </div>
       ),
@@ -78,6 +88,18 @@ export default function AdminUsersPage() {
       key: 'status',
       header: 'Status',
       render: (u) => (u.isActive ? <Badge tone="success" dot>Active</Badge> : <Badge tone="danger" dot>Deactivated</Badge>),
+    },
+    {
+      key: 'onboarding',
+      header: 'Onboarding',
+      render: (u) =>
+        u.role !== 'ACCOUNT_HOLDER' ? (
+          <span className="text-xs text-slate-400">—</span>
+        ) : u.onboardingStatus === 'APPROVED' ? (
+          <Badge tone="success">Onboarded</Badge>
+        ) : (
+          <Badge tone="warning">Pending</Badge>
+        ),
     },
     { key: 'createdAt', header: 'Joined', render: (u) => <span className="text-slate-500">{formatDate(u.createdAt)}</span> },
     {
@@ -108,6 +130,7 @@ export default function AdminUsersPage() {
           <Input label="Search" placeholder="Name or email" value={search} onChange={(e) => setSearch(e.target.value)} className="flex-1" maxLength={64} />
           <Select label="Role" options={ROLE_OPTIONS} value={role} onChange={(e) => update({ role: e.target.value })} className="md:w-48" />
           <Select label="Status" options={STATUS_OPTIONS} value={status} onChange={(e) => update({ status: e.target.value })} className="md:w-44" />
+          <Select label="Onboarding" options={ONBOARDING_OPTIONS} value={onboarding} onChange={(e) => update({ onboarding: e.target.value })} className="md:w-48" />
           <Button type="submit">Search</Button>
         </form>
         <ErrorState error={users.error} onRetry={users.reload} className="m-4" />
@@ -122,7 +145,10 @@ export default function AdminUsersPage() {
         tone={pending?.isActive ? 'danger' : 'primary'}
         loading={saving}
         onConfirm={confirmChange}
-        onCancel={() => setPending(null)}
+        onCancel={() => {
+          setPending(null)
+          setReason('')
+        }}
       >
         {pending && (
           <p>
@@ -138,6 +164,13 @@ export default function AdminUsersPage() {
             )}
           </p>
         )}
+        <Input
+          label="Reason (optional, stored in the audit log)"
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          maxLength={200}
+          className="mt-4"
+        />
       </ConfirmDialog>
     </>
   )

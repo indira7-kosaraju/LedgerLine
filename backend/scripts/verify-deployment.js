@@ -67,11 +67,12 @@ async function main() {
   const setCookie = cookieLogin.headers.get('set-cookie') || '';
   check('browser login sets an HttpOnly, Secure, SameSite=Strict cookie', /HttpOnly/i.test(setCookie) && /Secure/i.test(setCookie) && /SameSite=Strict/i.test(setCookie));
   check('holder cannot read the ledger (403)', (await call('GET', '/ledger/entries', { token: asha })).status === 403);
+  check('holder cannot open the admin overview or staff list (403)', (await call('GET', '/admin/overview', { token: asha })).status === 403 && (await call('GET', '/admin/staff', { token: asha })).status === 403);
   check('auditor cannot move money (403)', (await call('POST', '/transactions/deposit', { token: auditor, key: crypto.randomUUID(), body: { accountId: crypto.randomUUID(), amountPaise: 100 } })).status === 403);
 
   console.log('\nMoney movement (fresh test user)');
   const email = `deploy-check-${crypto.randomUUID().slice(0, 8)}@example.com`;
-  const reg = await call('POST', '/auth/register', { body: { email, password: 'Deploy123check', fullName: 'Deployment Check' } });
+  const reg = await call('POST', '/auth/register', { body: { email, password: 'Verify2026Ok' /* must not contain the email name (step 6 rule) */, fullName: 'Deployment Check' } });
   check('register', reg.status === 201);
   const me = reg.body?.token;
   // Onboarding (step 4): no account before it, approved automatically with a valid (demo) profile and the current terms.
@@ -117,6 +118,8 @@ async function main() {
   const verify = await call('GET', '/ledger/verify', { token: auditor });
   check('ledger verifies (auditor)', verify.body?.ok === true, JSON.stringify(verify.body?.checks));
   check('all balances sum to ₹0', verify.body?.sumOfAllBalances?.paise === '0');
+  const auditTrail = await call('GET', '/audit-logs/verify', { token: auditor });
+  check('audit trail hash chain verifies (auditor)', auditTrail.status === 200 && auditTrail.body?.ok === true, `${auditTrail.body?.records} records, head #${auditTrail.body?.head?.chainSeq}`);
 
   const failed = results.filter((ok) => !ok).length;
   console.log(failed ? `\n❌ ${failed} of ${results.length} checks FAILED` : `\n✅ Deployment verified: ${results.length} checks passed`);

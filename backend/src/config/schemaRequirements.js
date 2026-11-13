@@ -7,6 +7,10 @@ const REQUIRED_TRIGGERS = Object.freeze([
   'accounts_balance_matches_ledger',
   // Step 4 – onboarding cannot be skipped
   'users_onboarding_requires_profile', 'accounts_owner_onboarded',
+  // Step 5 – roles and staff
+  'users_role_transition', 'accounts_owner_is_holder', 'users_keep_one_active_admin',
+  // Step 6 – tamper-evident audit trail
+  'audit_logs_chain',
 ]);
 const REQUIRED_CONSTRAINTS = Object.freeze([
   'accounts_customer_balance_non_negative', 'accounts_owner_matches_type', 'transactions_amount_positive',

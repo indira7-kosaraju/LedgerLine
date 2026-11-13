@@ -97,10 +97,12 @@ model User {
   updatedAt      DateTime @updatedAt
 
   // Onboarding (step 4). Users that existed before step 4 were marked APPROVED by the migration.
-  onboardingStatus OnboardingStatus @default(PENDING_PROFILE)
-  onboardedAt      DateTime?
-  termsVersion     String?
-  termsAcceptedAt  DateTime?
+  onboardingStatus   OnboardingStatus @default(PENDING_PROFILE)
+  onboardedAt        DateTime?
+  termsVersion       String?
+  termsAcceptedAt    DateTime?
+  // Step 5 – staff created by an admin get a temporary password and must change it before anything else.
+  mustChangePassword Boolean          @default(false)
 
   profile         CustomerProfile?
   accounts        Account[]
@@ -219,6 +221,12 @@ model AuditLog {
   ipAddress  String?
   userAgent  String?
   createdAt  DateTime     @default(now())
+
+  // Step 6 – hash chain, set ONLY by the database trigger audit_logs_chain (NOT NULL in the database; optional here
+  // so the API never has to – and cannot meaningfully – provide them).
+  chainSeq BigInt? @unique
+  prevHash String?
+  hash     String?
 
   actor User? @relation(fields: [actorId], references: [id], onDelete: Restrict)
 

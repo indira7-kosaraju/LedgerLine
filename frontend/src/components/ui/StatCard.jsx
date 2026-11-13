@@ -12,7 +12,7 @@ export default function StatCard({ label, value, hint, tone = 'default' }) {
         <p
           className={cn(
             'mt-1 text-2xl font-semibold tabular-nums tracking-tight',
-            tone === 'danger' ? 'text-rose-600' : tone === 'success' ? 'text-emerald-600' : 'text-slate-900',
+            tone === 'danger' ? 'text-rose-600' : tone === 'warning' ? 'text-amber-600' : tone === 'success' ? 'text-emerald-600' : 'text-slate-900',
           )}
         >
           {value}

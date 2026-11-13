@@ -5,6 +5,8 @@ import { ROLE_LABELS } from '../../config/roles'
 
 export default function AuditLogTable({ items = [], loading, compact = false, empty = 'No audit events.' }) {
   const columns = [
+    // Position in the tamper-evident hash chain (step 6)
+    { key: 'chainSeq', header: '#', render: (e) => <span className="font-mono text-xs text-slate-400">{e.chainSeq ?? '—'}</span> },
     { key: 'createdAt', header: 'Time', render: (e) => <span className="text-slate-600">{formatDateTime(e.createdAt)}</span> },
     {
       key: 'actor',

@@ -10,6 +10,8 @@ const { RedisStore } = require('rate-limit-redis');
 const env = require('../config/env');
 const redis = require('../config/redis');
 const AppError = require('../utils/AppError');
+const audit = require('../services/audit.service');
+const requestContext = require('../utils/requestContext');
 
 const FIFTEEN_MINUTES = 15 * 60 * 1000;
 const ONE_HOUR = 60 * 60 * 1000;
@@ -27,6 +29,17 @@ function createLimiter({ name, failClosed, ...options }) {
     legacyHeaders: false,
     store: storeFor(name),
     passOnStoreError: !failClosed,
+    // Step 6: the sign-in limits record every refusal (password guessing is a security event). The general API
+    // limit does not – a flood of 429s would otherwise flood the audit trail.
+    ...(failClosed && {
+      handler: async (req, res, next, opts) => {
+        await audit.recordSafe({
+          actorId: req.user?.id ?? null, action: 'AUTH_RATE_LIMITED', outcome: 'REFUSED', reason: name,
+          metadata: { method: req.method, path: req.originalUrl.split('?')[0] }, ...requestContext(req),
+        });
+        res.status(opts.statusCode).json(opts.message);
+      },
+    }),
     ...options,
   });
   if (!failClosed) return limiter;
@@ -34,11 +47,15 @@ function createLimiter({ name, failClosed, ...options }) {
   // Fail closed: a store error becomes a clear 503 instead of a generic 500 – and never lets the request through.
   return (req, res, next) => {
     let settled = false;
-    const done = (err) => {
+    const done = async (err) => {
       if (settled) return;
       settled = true;
       if (!err) return next();
       console.error(`Rate limiter "${name}" unavailable – request refused:`, redact(err));
+      await audit.recordSafe({
+        actorId: req.user?.id ?? null, action: 'AUTH_RATE_LIMIT_UNAVAILABLE', outcome: 'ERROR', reason: name,
+        metadata: { method: req.method, path: req.originalUrl.split('?')[0] }, ...requestContext(req),
+      });
       return next(new AppError(503, 'Sign-in is temporarily unavailable. Please try again in a minute.', 'SERVICE_UNAVAILABLE'));
     };
     Promise.resolve(limiter(req, res, done)).catch(done);

@@ -103,3 +103,15 @@ export function validateOnboardingDetails(values, requirements) {
   if (!requirements.occupations.includes(values.occupation)) errors.occupation = 'Choose an occupation'
   return errors
 }
+
+// Staff management (step 5). Mirrors backend/src/utils/schemas/admin.schemas.js (createStaffSchema).
+export function validateStaff({ fullName, email, role, currentPassword }) {
+  const errors = {}
+  if (fullName.trim().length < 2) errors.fullName = 'Full name must be at least 2 characters'
+  else if (fullName.trim().length > 100) errors.fullName = 'Full name must be at most 100 characters'
+  if (!email.trim()) errors.email = 'Email is required'
+  else if (!EMAIL_PATTERN.test(email.trim())) errors.email = 'Enter a valid email address'
+  if (!['ADMIN', 'AUDITOR'].includes(role)) errors.role = 'Choose a staff role'
+  if (!currentPassword) errors.currentPassword = 'Enter your password to confirm'
+  return errors
+}

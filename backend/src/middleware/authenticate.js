@@ -2,6 +2,8 @@ const prisma = require('../config/prisma');
 const AppError = require('../utils/AppError');
 const { verifyAccessToken } = require('../utils/jwt');
 const { SESSION_COOKIE } = require('../utils/authCookie');
+const audit = require('../services/audit.service');
+const requestContext = require('../utils/requestContext');
 
 // Reads the JWT from "Authorization: Bearer <token>" (API tools, tests) or,
 // if that header is absent, from the HttpOnly session cookie (the React app).
@@ -14,6 +16,9 @@ function getToken(req) {
   }
   return req.cookies?.[SESSION_COOKIE] || null;
 }
+
+// The only routes a user with a temporary password may use (logout does not need authenticate).
+const PASSWORD_CHANGE_ALLOWED = new Set(['GET /api/auth/me', 'POST /api/auth/change-password']);
 
 // Protects a route. On success, sets req.user = { id, email, fullName, role, onboardingStatus }.
 async function authenticate(req, res, next) {
@@ -36,17 +41,32 @@ async function authenticate(req, res, next) {
   // trusting the (possibly old) role inside the token.
   const user = await prisma.user.findUnique({
     where: { id: payload.sub },
-    select: { id: true, email: true, fullName: true, role: true, isActive: true, sessionVersion: true, onboardingStatus: true },
+    select: { id: true, email: true, fullName: true, role: true, isActive: true, sessionVersion: true, onboardingStatus: true, mustChangePassword: true },
   });
 
-  if (!user || !user.isActive) {
+  if (!user) {
     return next(new AppError(401, 'Invalid token', 'UNAUTHENTICATED'));
   }
 
-  // The token was issued before the user logged out or before an admin changed their
-  // status → it has been revoked, even though its signature and expiry are still valid.
-  if (payload.sv !== user.sessionVersion) {
-    return next(new AppError(401, 'Your session has ended. Please sign in again.', 'SESSION_REVOKED'));
+  // Step 6: a correctly signed token that is no longer valid is a security signal (a copied cookie used after
+  // logout, a deactivated user still trying) – it is recorded. Tokens with a bad signature have no trustworthy
+  // user id and are not recorded (the rate limit applies to them).
+  const rejected = !user.isActive ? 'USER_INACTIVE' : payload.sv !== user.sessionVersion ? 'SESSION_REVOKED' : null;
+  if (rejected) {
+    await audit.recordSafe({
+      actorId: user.id, action: 'AUTH_SESSION_REJECTED', outcome: 'REFUSED', reason: rejected, entityType: 'User', entityId: user.id,
+      metadata: { method: req.method, path: req.originalUrl.split('?')[0] }, ...requestContext(req),
+    });
+    // The token was issued before the user logged out or before an admin changed their
+    // status → it has been revoked, even though its signature and expiry are still valid.
+    return next(rejected === 'USER_INACTIVE'
+      ? new AppError(401, 'Invalid token', 'UNAUTHENTICATED')
+      : new AppError(401, 'Your session has ended. Please sign in again.', 'SESSION_REVOKED'));
+  }
+
+  // A temporary password set by an admin (step 5) must be changed before anything else is allowed.
+  if (user.mustChangePassword && !PASSWORD_CHANGE_ALLOWED.has(`${req.method} ${req.originalUrl.split('?')[0]}`)) {
+    return next(new AppError(403, 'Change your temporary password first', 'PASSWORD_CHANGE_REQUIRED'));
   }
 
   req.user = { id: user.id, email: user.email, fullName: user.fullName, role: user.role, onboardingStatus: user.onboardingStatus };

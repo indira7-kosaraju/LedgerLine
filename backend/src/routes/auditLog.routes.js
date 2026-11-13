@@ -11,4 +11,7 @@ const router = Router();
 // GET /api/audit-logs?outcome=REFUSED – ADMIN and AUDITOR only. Read-only: no POST/PUT/DELETE exists.
 router.get('/', authenticate, requirePermission('audit:read'), validate(listAuditLogsQuerySchema, 'query'), auditLogController.list);
 
+// GET /api/audit-logs/verify – recomputes the tamper-evident hash chain (step 6). ADMIN and AUDITOR.
+router.get('/verify', authenticate, requirePermission('audit:read'), auditLogController.verify);
+
 module.exports = router;

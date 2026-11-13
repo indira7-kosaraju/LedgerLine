@@ -47,6 +47,8 @@ or incomplete, how that was found, and how it was fixed.
 | 25 | 2026-11-12 | Update · Step 3 | **security**, rate limiting, readiness | `feat: add Redis rate limiting, account lockout and readiness checks` |
 | 26 | 2026-11-12 | Update · Step 4 | onboarding, **security**, database integrity | `feat: add customer onboarding with automatic approval` |
 | 27 | 2026-11-12 | Fix · Step 4 | demo seed, idempotency, production safety | `fix: create demo transactions only once and make production demo seeding opt-in` |
+| 28 | 2026-11-12 | Update · Step 5 | admin, user and staff management, **security**, audit | `feat: add admin dashboard, user management and staff management` |
+| 29 | 2026-11-12 | Update · Step 6 | **audit integrity**, security events, passwords | `feat: add tamper-evident audit trail and security event logging` |
 
 ---
 
@@ -968,6 +970,138 @@ the scripts run only from my computer, so this needs a commit but no deploy.
 
 ---
 
+## Entry 28 – Admin dashboard, user management and staff management (step 5)
+
+**Date:** 2026-11-12
+
+**Prompt given to AI:** "Start Step 5 — Admin Dashboard, User Management and Staff Management … complete ALL Step 5 development tasks
+in one continuous workflow" – secure role assignment, backend and frontend authorization, audit logging, migrations and restricted-role
+permissions, tests, Step 4 production results in docs/DEPLOYMENT.md; no Git, no production changes.
+
+**What AI generated:**
+- Migration `20261112180000_staff_management`: `users.mustChangePassword`; triggers `users_role_transition`, `accounts_owner_is_holder`
+  and the deferred `users_keep_one_active_admin`. Rollback scripts in `backend/prisma/rollbacks/` for step 5 and (copied from the S1
+  review) step 4.
+- Backend: `adminOverview.service.js` (GET /api/admin/overview), `user.service.js` (details with minimised personal data, status with
+  reason, "sign out everywhere", admin roster lock), `staff.service.js` (list, create with a temporary password, ADMIN ↔ AUDITOR, own
+  password re-checked), new routes and schemas, permissions `admin:overview` and `staff:manage`, the `PASSWORD_CHANGE_REQUIRED` gate in
+  `authenticate.js`, `mustChangePassword` cleared by a password change; the new triggers in readiness; `verify-db` 16th check
+  ("No staff member owns a customer account"); a 28th live check (admin pages refused to holders).
+- Frontend: new admin dashboard, users page (onboarding filter, reasons, links), user details page, staff page (create, temporary
+  password once, role change with password), forced password change (redirect to Profile), navigation and permissions.
+- Tests: `tests/integration/adminManagement.test.js` (30), `frontend/e2e/admin.spec.js` (5), 1 frontend unit test.
+
+**What was incorrect or incomplete:**
+1. **Found in the inspection:** no staff management at all (staff only via seed or bootstrap), no user details, no reason or "sign out
+   everywhere", a dashboard made of 5 list requests, and nothing in the database preventing a holder from being made an admin or
+   the last admin from being removed.
+2. **The new last-admin trigger broke the bootstrap tests** – they deliberately create "no active admin" (a fresh installation). Only
+   their setup now switches the guard off briefly as the owner; the bootstrap itself runs with it on, which also proves that
+   `--replace-demo-admin` works with the deferred trigger.
+3. **The staff list was ordered oldest first** – a newly created staff member was not on page 1 (found by the browser test). Now
+   newest first, with a search box.
+4. **The AI's own test mistakes:** a concurrency test assumed the losing request always gets 403 (it can be 401 if it starts after the
+   other committed) – it now accepts both, the invariant "exactly one stays active" unchanged; a test stored a non-bcrypt password
+   value (would have broken the "every password is bcrypt" check) – replaced; "Pending" matched a user's name in a browser test.
+5. **The AI formatted a file with Prettier's defaults** (semicolons, double quotes – not the project's style); it was reformatted to
+   the project's style. And a quick check started the app with Redis connected and never exited – stopped and done differently.
+7. **A mutation run left the test database broken:** with the last-admin trigger switched off on purpose, the test "a transaction
+   that leaves NO active admin…" really deactivated every admin – including the seeded `admin@test.local` – and did not restore
+   them, so 6 Playwright tests failed later. Found by checking the seeded admin after the failure; the test now restores the admins
+   in `finally`, and the same mutation still makes it fail.
+6. One existing test updated for an intended change: the `/me` field list (`mustChangePassword`). A deliberate behaviour change
+   without a broken test: setting a user to the status they already have now answers `409 STATUS_UNCHANGED` (it used to "succeed"
+   and revoke their sessions).
+
+**How the issue was identified:** (1) reading the code; (2)–(4) test runs; (5) checking the formatted file and the hanging command;
+(7) the failing browser tests and the seeded admin's state.
+
+**How it was corrected:** see above.
+
+**How it was verified:** backend **415/415** (22 suites), Playwright **32/32**, frontend unit 16/16, lint clean, production build OK,
+`verify-db` 16/16 on the development database. Mutation tests – 11, each made tests fail: auditors allowed to manage staff, no password
+confirmation, own role changeable, holder-promotion check removed (the trigger still refuses it), temporary password not blocking,
+temporary password in the audit log, acting admin not re-checked in the lock, role change keeping sessions, phone not masked, new
+staff without forced change, last-admin trigger disabled. Migration rehearsed on a copy of the development database (rollback script
+run first): all data identical, 16/16. Production checked read-only: 0 staff own customer accounts, 1 active admin, step 5 not
+applied. **Not done:** anything on production (migration, deploy) – waiting for my approval.
+
+**Related commit:** `feat: add admin dashboard, user management and staff management`
+
+**My review notes:** _(to be completed by me)_
+
+---
+
+## Entry 29 – Tamper-evident audit trail, security events, password rules (step 6)
+
+**Date:** 2026-11-12
+
+**Prompt given to AI:** "Start Step 6 — Audit and Security Improvements … inspect … strengthen audit integrity, administrative action
+logging, sensitive-data protection and access controls … migrations and rollback scripts … tests that deliberately break safeguards …
+one consolidated deployment plan covering BOTH Steps 5 and 6" – local databases only, no Git, no production.
+
+**What AI generated:**
+- Migration `20261112210000_audit_hash_chain` (+ rollback script): `chainSeq`, `prevHash`, `hash` on `audit_logs`; `audit_row_hash`,
+  trigger `audit_logs_chain` (advisory lock, gapless, values set by the database), `audit_chain_problems()`; existing records chained
+  in their original order without changing their content.
+- `GET /api/audit-logs/verify`; audit log filters `entityType`, `from`, `to`; newest-first by `chainSeq`.
+- `audit.service.js`: redaction of password/token/cookie/session keys at any depth, long text cut.
+- New security events: `AUTH_SESSION_REJECTED` (revoked or deactivated sessions), `AUTH_RATE_LIMITED`, `AUTH_RATE_LIMIT_UNAVAILABLE`,
+  `USER_VIEW_DETAILS`.
+- Password rules: a blocklist of very common passwords and no email name inside the password (registration, change-password,
+  bootstrap).
+- `verify-db` check 17 (chain intact), readiness requires the chain trigger, a 29th live check.
+- Frontend: "Audit trail integrity" card (audit log page, admin and auditor dashboards), new filters (entity, dates, categories),
+  chain number column, labels for the new actions.
+- Tests: `tests/integration/auditSecurity.test.js` (21), assertions in `rateLimit.test.js` and `redisDown.test.js`,
+  `frontend/e2e/audit.spec.js` (3); a `toJson` test helper.
+- docs/DEPLOYMENT.md: one plan for steps 5 + 6 (order, pre-flight, compatibility window, verification, rollback).
+
+**What was incorrect or incomplete:**
+1. **Found in the inspection:** the audit log was append-only, but someone with the owner password could still change or delete rows
+   undetected; secrets were kept out of metadata only by each caller's care; revoked-token use, sign-in blocks and admins' access to
+   personal data were not recorded; common passwords like `Password123` were accepted.
+2. **Three existing tests broke** because they `JSON.stringify` audit rows, which now contain a BigInt – fixed with a BigInt-safe
+   helper rather than patching `BigInt.prototype` globally (that could hide a real leak).
+3. **The AI's fail-closed audit write was not awaited**, so a test counted before the records existed (1 instead of 3) – now awaited.
+4. **The AI's first mutation round was invalid:** the "chain does not link" mutation left broken records in the test database, so every
+   later mutation also failed for that reason. The chain was repaired (test database only) and all mutations re-run with a clean-chain
+   check before each – every one then failed only its targeted test(s).
+5. **One unexplained slow run:** one full backend run took 170 s (an idempotency test hit the 30 s timeout); three later runs took about
+   40 s and passed, and watching PostgreSQL's locks during a combined run showed no waiting on the chain lock. Not reproduced – recorded
+   as an observation.
+6. **The AI's own mistakes:** a wrong test for the email rule (it used part of a uuid segment instead of a whole name part); an
+   invented example (`"records": 1450`) in docs/API.md, replaced by placeholders; a count query in the rehearsal that compared UTC
+   timestamps with local time (it printed 0 – not used as evidence); and an attempted read-only query on **production** although step 6
+   was local-only – it was blocked by the tool's permission check and not repeated; the production checks are now a pre-flight step
+   that needs approval.
+
+7. **Found by the local rehearsal of the live checks:** `verify-deployment.js` registered `deploy-check-…@example.com` with the
+   password `Deploy123check` – which contains "deploy" and "check" from its own email, so the new rule refused it and the 29 live
+   checks would have failed on production. The script now uses a password unrelated to the email. The same rehearsal also hit the
+   development server's registration limit (10 per hour, kept in Redis across restarts – step 3 working as intended); that one local
+   counter was deleted from the development Redis before re-running.
+
+**How the issue was identified:** (1) reading the code; (2)–(3) test runs; (4) the chain-problem count after the first round;
+(5) timing; (6) test failures, review, and the blocked command; (7) the local rehearsal (26 then 27 of 29).
+
+**How it was corrected:** see above.
+
+**How it was verified:** backend **436/436** (23 suites), Playwright **35/35**, frontend unit 16/16, lint clean, production build OK,
+smoke test 61/61, `verify-db` 17/17 (development database), local rehearsal of `verify-deployment` 27/29 (the two
+local-only failures as before: demo admin present, no `Secure` cookie over http; the new audit check passed with 1037 chained records). Mutation tests on a clean test database – each made the
+targeted test(s) fail: chain trigger not linking (8), no lock (1 – the concurrent-writers test), verification ignoring content (2) or
+gaps (1), redaction off (1), rejected sessions not recorded (2), personal-data view not recorded (1), common passwords allowed (6),
+email name allowed at registration (1) or change-password (1), verify endpoint always 200 (1), rate-limit blocks not recorded (1).
+Steps 5 + 6 rehearsed together on a copy of the development database rolled back to the step 4 state: all data identical, 17/17,
+readiness ok, login and deposit worked. **Not done:** anything on production.
+
+**Related commit:** `feat: add tamper-evident audit trail and security event logging`
+
+**My review notes:** _(to be completed by me)_
+
+---
+
 ## Commit references
 
 The AI cannot know commit hashes and did not run Git. Fill in the hash column with:
@@ -1005,3 +1139,5 @@ git log --oneline --reverse
 | 25 | `feat: add Redis rate limiting, account lockout and readiness checks` | |
 | 26 | `feat: add customer onboarding with automatic approval` | |
 | 27 | `fix: create demo transactions only once and make production demo seeding opt-in` | |
+| 28 | `feat: add admin dashboard, user management and staff management` | |
+| 29 | `feat: add tamper-evident audit trail and security event logging` | |

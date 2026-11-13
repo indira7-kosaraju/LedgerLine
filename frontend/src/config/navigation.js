@@ -1,4 +1,4 @@
-import { ArrowDownIcon, ArrowUpIcon, BookIcon, CheckCircleIcon, HomeIcon, ListIcon, ShieldIcon, TransferIcon, UserIcon, UsersIcon, WalletIcon } from '../components/icons'
+import { ArrowDownIcon, ArrowUpIcon, BookIcon, CheckCircleIcon, HomeIcon, KeyIcon, ListIcon, ShieldIcon, TransferIcon, UserIcon, UsersIcon, WalletIcon } from '../components/icons'
 import { can, needsOnboarding } from './roles'
 
 // Sidebar items. `permission` hides items the role can't use (UI only –
@@ -15,6 +15,7 @@ const NAV_ITEMS = [
   { to: '/ledger', label: 'Ledger', icon: BookIcon, permission: 'ledger:read' },
   { to: '/audit-logs', label: 'Audit logs', icon: ShieldIcon, permission: 'audit:read' },
   { to: '/admin/users', label: 'Users', icon: UsersIcon, permission: 'users:manage' },
+  { to: '/admin/staff', label: 'Staff', icon: KeyIcon, permission: 'staff:manage' },
   { to: '/profile', label: 'Profile', icon: UserIcon },
 ]
 

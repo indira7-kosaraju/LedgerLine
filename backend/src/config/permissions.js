@@ -35,7 +35,11 @@ const PERMISSIONS = Object.freeze({
 
   // User administration
   'users:read': [ADMIN],
-  'users:manage': [ADMIN],
+  'users:manage': [ADMIN], // activate / deactivate, sign out everywhere
+  'admin:overview': [ADMIN], // the admin dashboard figures (step 5)
+  // Staff management (step 5): create ADMIN/AUDITOR accounts, change ADMIN ↔ AUDITOR. Requires the admin's own
+  // password on every change; account holders can never become staff (also enforced by the database).
+  'staff:manage': [ADMIN],
 });
 
 function hasPermission(role, permission) {

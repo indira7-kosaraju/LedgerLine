@@ -37,18 +37,25 @@ LedgerLine is a learning project that implements these guarantees end to end and
 - **Registration and onboarding:** after signing up, an account holder submits a demo profile (age 18+, Indian mobile number,
   city, state, PIN code, occupation) and accepts the current terms, and is approved automatically. Before that, the API and the
   database refuse accounts and money movement. Users are told not to enter real personal data.
-- **Audit log** for logins, account changes, money movements and refusals.
+- **Admin dashboard, user and staff management:** dashboard figures computed by the database; user search, details with minimised
+  personal data, activate / deactivate and "sign out everywhere" with reasons; staff creation (temporary password shown once, forced
+  change) and ADMIN ↔ AUDITOR changes confirmed with the admin's own password. Account holders can never become staff and the last
+  active admin cannot be removed – enforced by the API and by database triggers.
+- **Tamper-evident audit log** for logins, account changes, money movements, administrative actions and refusals: append-only and
+  hash-chained by the database, verifiable at any time (a changed, removed or reordered record is named); secrets are redacted;
+  rejected sessions, sign-in blocks and admins' access to personal data are recorded.
+- **Password rules:** character rules plus a blocklist of very common passwords and no email name inside the password.
 - **Rate limiting in Redis** for login, registration and the whole API – shared by all server instances and kept across restarts –
   plus a per-account login lockout. If Redis is down, sign-in fails closed (503) and the rest of the API keeps working. `TRUST_PROXY`
   makes the limits use the real client IP behind hosting proxies.
 - **Liveness and readiness checks:** `/api/health/live`, and `/api/health/ready` (database, Redis, ledger protections, limited
   database role), used as Render's health check so a broken deploy never goes live.
 - **Tests:**
-  - 385 backend tests (Jest + Supertest) on a separate test database and a local Redis
-  - 27 browser tests (Playwright)
-  - 15 frontend unit tests
+  - 436 backend tests (Jest + Supertest) on a separate test database and a local Redis
+  - 35 browser tests (Playwright)
+  - 16 frontend unit tests
   - a 61-check smoke test
-  - a 15-check database verifier
+  - a 17-check database verifier
   - a 25-check deployment verifier
 - **Documentation:** [README](../README.md), [API reference](API.md), [threat model](../THREATS.md), [security audit](SECURITY_AUDIT.md),
   [deployment guide](DEPLOYMENT.md), and an [AI prompt log](../PROMPTS.md) with 22 entries.
@@ -143,7 +150,9 @@ The lesson: AI output has to be proven by tests and by the real running system, 
 - **Step 3 is live and verified (2026-11-12):** readiness reports database, Redis, ledger protections and the limited role as `ok`;
   25/25 live checks and 14/14 database checks passed. The login lockout itself was deliberately not triggered on production.
 - **Step 4 (onboarding) is live (2026-11-12):** migration applied, readiness all `ok`, 15/15 database checks; the frontend serves the
-  onboarding page with the demo-data warning. The 27 live checks have not been run against it yet.
+  onboarding page with the demo-data warning; the 27 live checks passed (1 test user, 3 accounts, 6 transactions added).
+- **Steps 5 and 6 (admin, users and staff; audit integrity and security):** built and tested locally (436 backend tests, 35 browser
+  tests); not deployed yet – they go out together after two migrations (see docs/DEPLOYMENT.md, "Deploying steps 5 and 6 together").
 - **Accepted:** 7 demo transactions were duplicated on production by a re-run of the demo seed (its idempotency keys had expired).
   Simulated money on demo accounts only; kept as they are (append-only ledger). The seed is fixed and production demo seeding is now
   opt-in (see docs/DEPLOYMENT.md).

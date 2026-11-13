@@ -1,6 +1,6 @@
 # LedgerLine – Financial Security Threat Model
 
-**Last updated:** 2026-11-12 (step 4 – onboarding)
+**Last updated:** 2026-11-12 (step 6 – audit integrity and security)
 **System:** React frontend → Express API (JWT in an HttpOnly cookie) → PostgreSQL via Prisma. Simulated money only (INR, stored as integer paise).
 
 ## How to read this document
@@ -11,7 +11,7 @@ test show it. Where it says *mutation-tested*, the protection was temporarily re
 
 - Test files are in `backend/tests/integration/` (Jest + Supertest, run against the separate `ledgerline_test` database) and
   `frontend/e2e/` (Playwright in Chrome). Test names are quoted exactly as Jest/Playwright print them.
-- Run everything: `cd backend && npm test` (385 tests) · `cd frontend && npm run test:e2e` (27 tests).
+- Run everything: `cd backend && npm test` (436 tests) · `cd frontend && npm run test:e2e` (35 tests).
 - Related: [docs/SECURITY_AUDIT.md](docs/SECURITY_AUDIT.md) – the Day 3 audit with the actual result of each attack.
 
 ## Summary
@@ -22,7 +22,7 @@ test show it. Where it says *mutation-tested*, the protection was temporarily re
 | 2 | Concurrent withdrawals | ✅ Mitigated | `SELECT … FOR UPDATE` row lock; balance checked on the locked row | `concurrency.test.js` (mutation-tested) |
 | 3 | Race conditions (lost updates) | ✅ Mitigated | Row locks + database chain trigger | `concurrency.test.js`, `accounts.test.js` |
 | 4 | Unauthorized account access | ✅ Mitigated | Ownership check on the server for every account action | `authorization.test.js`, `security.test.js` |
-| 5 | Privilege escalation | ✅ Mitigated | Role read from the DB on every request; strict input schemas | `auth.test.js`, `authorization.test.js`, `security.test.js` |
+| 5 | Privilege escalation | ✅ Mitigated (extended in step 5) | Role read from the DB on every request; strict input schemas; staff roles only ADMIN ↔ AUDITOR, holders never become staff (API + trigger) | `auth.test.js`, `authorization.test.js`, `security.test.js`, `adminManagement.test.js` (mutation-tested) |
 | 6 | Negative balances | ✅ Mitigated | Check on the locked row + `CHECK (balance >= 0)` | `concurrency.test.js`, `ledgerSecurity.test.js` |
 | 7 | SQL injection | ✅ Mitigated | Prisma parameterised queries; no unsafe raw SQL in app code | `security.test.js` |
 | 8 | Ledger tampering | ✅ Mitigated (⚠️ see risks) | Append-only + balancing triggers in PostgreSQL | `ledgerSecurity.test.js` |
@@ -32,6 +32,8 @@ test show it. Where it says *mutation-tested*, the protection was temporarily re
 | 12 | Replay attacks | ✅ Mitigated (fixed Day 3) | Idempotent replays; session version revokes tokens on logout | `security.test.js` (mutation-tested) |
 | 13 | Brute-force login attempts | ⚠️ Partially (improved in step 3) | Redis-backed limits per IP **and per account**, fail closed; bcrypt; generic errors | `redisRateLimit.test.js`, `redisDown.test.js`, `rateLimit.test.js`, `auth.test.js` |
 | 14 | Skipping onboarding (accounts or money before approval, self-approval) | ✅ Mitigated (step 4) | Server-side guard on every account/money route + database triggers; strict input | `onboarding.test.js` (mutation-tested), `frontend/e2e/onboarding.spec.js` |
+| 15 | Misuse of administrator powers (stolen admin session, admins locking each other out) | ⚠️ Partially (step 5) | Password re-check for staff changes; roster lock; at least one active admin (trigger); temporary passwords; full audit | `adminManagement.test.js` (mutation-tested), `frontend/e2e/admin.spec.js` |
+| 16 | Audit trail tampering and sensitive data in logs | ✅ Mitigated (⚠️ see risks) (step 6) | Append-only + hash chain set by the database; verification endpoint; metadata redaction; security events recorded | `auditSecurity.test.js` (mutation-tested), `ledgerSecurity.test.js`, `frontend/e2e/audit.spec.js` |
 
 ---
 
@@ -173,8 +175,20 @@ move money (separation of duties); auditors are read-only.
 - `authorization.test.js` › "ADMIN and AUDITOR cannot deposit (separation of duties)" (also withdraw, transfer, open account)
 - `authorization.test.js` › "AUDITOR is read-only: can read everything, change nothing"
 
-**Remaining accepted risks.** Admins are powerful by design (no two-person approval, no MFA). Admin and auditor accounts are created
-only by the seed script from `.env`; their passwords must be strong and kept secret.
+**Step 5 – staff roles.** Staff accounts are created only by an admin (`POST /api/admin/staff`) or by `admin:bootstrap`, never by
+registration. Only ADMIN ↔ AUDITOR changes exist; an account holder can never become staff (they own accounts and could otherwise
+move money as an admin) and staff never become account holders – refused by the API (`400 ROLE_CHANGE_NOT_ALLOWED`) **and** by the
+trigger `users_role_transition`, which the API role cannot switch off. Staff can never own customer accounts (trigger
+`accounts_owner_is_holder`). Nobody changes their own role; a role change ends all sessions of that person.
+
+- `adminManagement.test.js` › "an account holder can never be promoted → 400 ROLE_CHANGE_NOT_ALLOWED, role unchanged", "an auditor
+  cannot promote themselves or anyone (403)", "AUDITOR / ACCOUNT_HOLDER cannot create staff or list staff (403)", "extra field
+  (mustChangePassword: false) → 400, nobody created", "an existing user is never turned into staff → 409 EMAIL_TAKEN", "an account
+  holder cannot be turned into staff, nor staff into a holder → trigger", "staff cannot own a customer account → trigger", "the role
+  guard cannot be switched off by the API role"
+
+**Remaining accepted risks.** Admins are powerful by design (no two-person approval, no MFA). Staff passwords must be strong and kept
+secret; a temporary password must be handed over through a secure channel.
 
 ## 6. Negative balances
 
@@ -377,7 +391,8 @@ user's status. Logout ends the user's sessions on **all** devices (no per-device
 
 **Possible impact.** Account takeover.
 
-**Prevention mechanism.** Failed logins are limited to 10 per 15 minutes per client IP **and** 10 per 15 minutes per account
+**Prevention mechanism.** (Step 6) Very common passwords and passwords containing the email name are refused at registration,
+password change and bootstrap; every 429 on sign-in is audited (`AUTH_RATE_LIMITED`). Failed logins are limited to 10 per 15 minutes per client IP **and** 10 per 15 minutes per account
 (email, from any IP – wrong current passwords on change-password count too); while an account is locked even the correct password
 gets `429`, and unknown emails are limited the same way, so the limit reveals nothing about which accounts exist. Registrations are
 limited to 10 per hour per IP. Since step 3 the counters live in **Redis**: they survive restarts and deploys and are shared by all
@@ -476,6 +491,106 @@ The audit entry `ONBOARDING_COMPLETE` stores the approval type and terms version
 
 ---
 
+## 15. Misuse of administrator powers
+
+**Description.** Someone with an admin session – stolen, or left open – changes roles or creates staff; or admins lock each other out.
+
+**Attack scenario.** (a) A stolen admin cookie is used to create a new admin for the attacker. (b) Two admins deactivate or demote
+each other at the same moment, leaving no administrator. (c) The last admin is demoted or deactivated by mistake. (d) A temporary
+password ends up in a log. (e) An admin reads customers' personal data in bulk.
+
+**Possible impact.** Permanent control of the platform; a platform nobody can administer; leaked credentials or personal data.
+
+**Prevention mechanism.** (a) Creating staff and changing roles need the admin's **own password** again; wrong passwords count toward
+the failed-login limits per IP and per account (Redis, step 3). (b) Every change that can affect the active admins takes an advisory
+lock and re-checks *inside* it that the acting admin is still an active admin. (c) The API refuses to deactivate or demote the last
+active admin, and the deferred trigger `users_keep_one_active_admin` refuses any transaction that would end without one (replacing an
+admin inside one transaction – `admin:bootstrap --replace-demo-admin` – still works). (d) New staff get a random 20-character
+password, returned once with `Cache-Control: no-store`, stored only as a bcrypt hash and never written to the audit log; until they
+choose their own, every route except `/auth/me` and `/auth/change-password` answers `403 PASSWORD_CHANGE_REQUIRED`. (e) User details
+show the age instead of the date of birth, a masked phone number and no PIN code. Every action – including refusals – is audited
+with the admin, the target, the reason (optional note) and before/after values.
+
+**Implemented protection.** `backend/src/services/staff.service.js`, `backend/src/services/user.service.js`,
+`backend/src/routes/admin.routes.js`, `backend/src/middleware/authenticate.js` (`PASSWORD_CHANGE_ALLOWED`),
+`backend/prisma/migrations/20261112180000_staff_management/migration.sql`.
+
+**Corresponding tests.**
+- `adminManagement.test.js` › "the admin's own password is required – a wrong one → 400, nobody created, refusal audited",
+  "two admins deactivating EACH OTHER at the same moment → exactly one succeeds", "a transaction that leaves NO active admin is refused
+  at commit (and rolled back)", "…but replacing one admin with another inside one transaction is fine (checked at commit)", "creates an
+  AUDITOR with a temporary password shown ONCE; never stored in plain text or logged", "the new staff member must change the temporary
+  password before doing anything else", "AUDITOR → ADMIN with the admin's password: role changed, their sessions end, audited
+  from/to", "user details: accounts and activity, personal data minimised (masked phone, age only, no PIN)"
+- `bootstrap.test.js` (all 14) – the first-admin bootstrap still works with the new trigger active
+- `frontend/e2e/admin.spec.js` › "staff lifecycle: create an auditor → temporary password once → forced change → promoted to admin
+  (with password check)"
+- Mutation-tested: auditors allowed to manage staff, no password confirmation, own role changeable, holder promotion check removed
+  (the trigger then turns it into an error – still refused), temporary password not blocking, temporary password in the audit log,
+  the acting admin not re-checked inside the lock, role changes keeping old sessions, phone not masked, new staff without a forced
+  password change, the last-admin trigger disabled – each made at least one test fail.
+
+**Remaining accepted risks.**
+- No MFA and no two-person approval: an attacker with an admin's session **and** password can still create staff.
+- (Step 6) Opening a user's details is itself audited (`USER_VIEW_DETAILS`), so access to personal data can be reviewed afterwards.
+- The temporary password is handed over outside the system (no email or invitation link); whoever receives it first can use it.
+- Deactivating or demoting an admin who is in the middle of a request does not cancel that request; their *next* request fails.
+- Admins see masked contact data and every audit record, including admins' notes.
+
+---
+
+## 16. Audit trail tampering and sensitive data in logs
+
+**Description.** Hiding what happened by changing or deleting audit records; or the audit trail itself leaking secrets.
+
+**Attack scenario.** (a) Someone with the database owner password switches the append-only trigger off and edits, deletes or reorders
+audit rows – e.g. turns a refused transfer into a success, or removes the record of a role change. (b) A careless change logs a
+request body that contains a password or token. (c) Stolen session cookies are replayed after logout, or sign-in is brute-forced, and
+nobody notices.
+
+**Possible impact.** An investigation built on a falsified record; credentials readable by every admin and auditor; attacks unseen.
+
+**Prevention mechanism.** (a) Besides the append-only and no-TRUNCATE triggers (threat 8), every audit record is part of a **hash
+chain** maintained by the database (trigger `audit_logs_chain`): a gapless sequence number, the previous record's hash and a SHA-256
+hash over its own content. The API cannot choose these values (they are overwritten) and its role cannot switch the triggers off.
+`audit_chain_problems()` – used by `GET /api/audit-logs/verify`, by the "Audit trail integrity" card for admins and auditors, by
+`verify-db` and by the live checks – recomputes the whole chain and names the first broken record: changed content, a record
+rewritten with a fresh hash (the next one no longer links), or a gap where a record was removed. Concurrent writers are serialised by
+an advisory lock held until commit, so the chain never forks; audit rows are always the last write in a transaction, so the lock is
+never held while waiting for another one. (b) `audit.service.js` redacts password-, token-, cookie- and session-like keys at any depth
+and cuts long text, whatever a caller passes. (c) Security events are recorded: tokens used after logout or after a deactivation
+(`AUTH_SESSION_REJECTED`), sign-in blocks (`AUTH_RATE_LIMITED`), sign-in refused because Redis is down (`AUTH_RATE_LIMIT_UNAVAILABLE`),
+and admins opening personal data (`USER_VIEW_DETAILS`).
+
+**Implemented protection.** `backend/prisma/migrations/20261112210000_audit_hash_chain/migration.sql`,
+`backend/src/services/audit.service.js` (`sanitize`), `backend/src/services/auditLog.service.js` (`verifyAuditChain`),
+`backend/src/middleware/authenticate.js`, `backend/src/middleware/rateLimiters.js`, `backend/scripts/verify-db.js` (check 17).
+
+**Corresponding tests.**
+- `auditSecurity.test.js` › "every new record follows the previous one: next sequence number, links to its hash", "the API cannot
+  choose the chain values – the database overwrites them", "40 records written at the same moment → one gapless chain, no problems",
+  "a record edited afterwards (owner, append-only trigger off) → "content changed" at exactly that record", "a record removed →
+  "records missing" at the next one", "a record rewritten WITH a fresh hash (to hide the edit) → the next record no longer links to
+  it", "the API role cannot switch off the chain or the append-only protection", "after real tampering → 500 with the broken record;
+  restoring the content → ok again", "password-, token- and cookie-like keys are redacted at any depth; long text is cut", "a token
+  used after logout → 401 and AUTH_SESSION_REJECTED (SESSION_REVOKED)"
+- `rateLimit.test.js` › "after 3 failed logins the 4th attempt is blocked with 429 and Retry-After – and the block is audited"
+- `redisDown.test.js` › "login, registration and change-password are refused with 503 – never let through unlimited" (now also audited)
+- Mutation-tested (each on a clean test database): the chain trigger not linking, the trigger without its lock, verification ignoring
+  changed content, verification ignoring gaps, redaction off, rejected sessions or personal-data views not recorded, the verify
+  endpoint always answering 200, rate-limit blocks not recorded – each made the targeted test(s) fail.
+
+**Remaining accepted risks.**
+- **No external anchor:** someone with the owner password could rewrite the chain *consistently* from some record to the end, or
+  delete the newest records – verification would then pass. Noting the chain head (`GET /api/audit-logs/verify` → `head`) outside the
+  system makes that detectable; it is not automated (no signed or off-site copy).
+- The hash is a plain SHA-256 without a secret key (anyone who can write to the table can also compute hashes – the protection is the
+  *link* between records and the noted head, not secrecy).
+- All audit writers are serialised for the few milliseconds between an audit insert and commit (throughput, not safety).
+- IP addresses and user agents of every actor are visible to admins and auditors.
+
+---
+
 ## Other threats covered
 
 | Threat | Protection | Test |
@@ -504,3 +619,5 @@ The audit entry `ONBOARDING_COMPLETE` stores the approval type and terms version
 9. Deployed behind Vercel + Render with `TRUST_PROXY=2`: requests sent **directly** to the `onrender.com` URL (bypassing Vercel) can fake one
    `X-Forwarded-For` entry and so evade the per-IP rate limit. Traffic through the app's own URL is not affected.
 10. Onboarding has no real identity check: approval is automatic for any valid (made-up) profile; earlier users were approved without one (threat 14).
+11. Admin powers: no MFA or two-person approval; temporary staff passwords are handed over outside the system (threat 15).
+12. Audit chain without an external anchor: a consistent rewrite of the newest records by the owner is only detectable against a noted chain head (threat 16).

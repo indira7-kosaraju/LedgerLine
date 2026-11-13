@@ -1,7 +1,7 @@
 import { Link } from 'react-router'
 import { useApi } from '../../hooks/useApi'
 import { listTransactions } from '../../api/transactions.api'
-import { listAuditLogs, listLedgerEntries, verifyLedger } from '../../api/oversight.api'
+import { listAuditLogs, listLedgerEntries, verifyLedger, verifyAuditTrail } from '../../api/oversight.api'
 import PageHeader from '../../components/ui/PageHeader'
 import StatCard from '../../components/ui/StatCard'
 import Badge from '../../components/ui/Badge'
@@ -11,6 +11,7 @@ import TransactionsTable from '../../components/domain/TransactionsTable'
 import AuditLogTable from '../../components/domain/AuditLogTable'
 import LedgerEntriesTable from '../../components/domain/LedgerEntriesTable'
 import LedgerIntegrityCard from '../../components/domain/LedgerIntegrityCard'
+import AuditIntegrityCard from '../../components/domain/AuditIntegrityCard'
 
 function ViewAll({ to }) {
   return (
@@ -26,6 +27,7 @@ export default function AuditorDashboard() {
   const ledger = useApi((opts) => listLedgerEntries({ limit: 6 }, opts))
   const refusedTxns = useApi((opts) => listAuditLogs({ outcome: 'REFUSED', actionPrefix: 'TXN_', limit: 6 }, opts))
   const integrity = useApi((opts) => verifyLedger(opts))
+  const auditIntegrity = useApi((opts) => verifyAuditTrail(opts))
 
   return (
     <>
@@ -59,7 +61,10 @@ export default function AuditorDashboard() {
           <CardHeader title="Refused transaction attempts" description="Deposits, withdrawals and transfers the system blocked" action={<ViewAll to="/audit-logs?outcome=REFUSED&category=TXN_" />} />
           <AuditLogTable items={refusedTxns.data?.items} loading={refusedTxns.loading} compact empty="No refused transaction attempts." />
         </Card>
-        <LedgerIntegrityCard result={integrity} />
+        <div className="space-y-6">
+          <LedgerIntegrityCard result={integrity} />
+          <AuditIntegrityCard result={auditIntegrity} />
+        </div>
       </div>
 
       <Card className="mt-6">

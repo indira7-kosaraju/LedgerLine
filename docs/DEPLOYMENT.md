@@ -4,11 +4,11 @@
 Simulated money only – never use real banking data.
 
 **Current deployment (verified 2026-11-12):** frontend <https://ledger-line-umber.vercel.app> · backend
-<https://ledgerline-z5o2.onrender.com> · Neon PostgreSQL 18. The API connects as `ledgerline_api`; `verify-db` passed 14/14 and
-`verify-deployment` 25/25 (see "Production verification" at the end).
-Step 3 (Redis rate limits + readiness) is deployed and verified (see "Production verification – step 3" at the end).
-**Step 4 (onboarding) is implemented and tested locally but not deployed yet** – it needs the database migration first (see "Deploying a
-migration" below).
+<https://ledgerline-z5o2.onrender.com> · Neon PostgreSQL 18 · Render Key Value (Redis). The API connects as `ledgerline_api`.
+Steps 2–4 (limited database role, Redis rate limits + readiness, onboarding) are deployed and verified – see the "Production
+verification" sections at the end (step 4: `verify-db` 15/15, `verify-deployment` 27/27).
+**Steps 5 (admin dashboard, user and staff management) and 6 (audit integrity and security) are implemented and tested locally but
+not deployed yet** – they go out together; see "Deploying steps 5 and 6 together" at the end.
 
 ```
 Browser ──https──▶ <app>.vercel.app ──┬─ /, /dashboard, …  → React app (static files on Vercel)
@@ -114,7 +114,7 @@ cd ~/Documents/snovasys/LedgerLine/backend
 npm run verify:deployment -- https://<your-app>.vercel.app
 ```
 
-Expected: `✅ Deployment verified: 25 checks passed` – site and security headers, SPA deep links, health through the rewrite, the demo
+Expected: `✅ Deployment verified: 29 checks passed` (after steps 5 + 6; 27 before them) – site and security headers, SPA deep links, health through the rewrite, the demo
 holder and auditor logins, a Secure HttpOnly cookie, role checks, deposit / withdrawal / transfer / history, idempotency (replay, 5 simultaneous
 duplicates, reused key → 422), the ₹800 + ₹700 race on ₹1,000, a balanced ledger, and that the public demo admin **cannot** log in.
 
@@ -278,3 +278,109 @@ affected – no real user, the bootstrapped admin, or any account outside the de
 
 Once this fix is committed, `npm run db:prepare:production` is safe to run again (it was paused after the duplicate).
 
+## Production verification – step 4 (2026-11-12)
+
+Commit `03a450d` (onboarding) after the S1 migration, then `67e2d2c` (demo seed fix – scripts only).
+
+**S3 – read-only checks after the deploy**
+
+| Check | Result |
+|---|---|
+| `GET /api/onboarding` without signing in | ✅ 401 (was 404 before the deploy); `POST` 401 |
+| `GET /api/health/ready` (directly and through Vercel) | ✅ 200 – `database`, `redis`, `schema`, `dbRole` all `ok` |
+| `verify-db` as `ledgerline_api` | ✅ 15/15 (11 triggers, 8 CHECK constraints, every account owner onboarded) |
+| App connections on Neon | ✅ only `ledgerline_api`; as that role, changing a profile or disabling the onboarding trigger is refused |
+| Frontend bundle | ✅ contains the onboarding page, "Demo application – do not enter real personal information" and the notice |
+| Existing data (read as `ledgerline_api`) | ✅ 8 users (all approved), 13 accounts, 34 transactions, 68 ledger entries – unchanged since S1 |
+
+**Live checks (approved – they create permanent records)**
+
+`npm run verify:deployment -- https://ledger-line-umber.vercel.app` → ✅ **27/27**, including "account refused before onboarding
+(403)" and "onboarding approved automatically". Afterwards: readiness all `ok`, `verify-db` 15/15, only `ledgerline_api` connections.
+Compared with a snapshot taken just before: all earlier users, transactions, ledger entries and audit records unchanged; of the
+earlier accounts only the SYSTEM account's balance moved (−₹1,200 net – the counterparty of the test deposits and withdrawals).
+
+| Records added by the run | Before → after |
+|---|---|
+| Users (`deploy-check-1396cdc1@example.com`, approved, demo profile) | 8 → 9 |
+| Customer profiles | 0 → 1 |
+| Accounts | 13 → 16 |
+| Transactions | 34 → 40 |
+| Ledger entries | 68 → 80 |
+| Idempotency keys | 33 → 41 |
+| Audit records | 112 → 140 |
+
+The `ONBOARDING_COMPLETE` audit entry holds `{"approval":"AUTOMATIC","termsVersion":"2026-11-12"}` – no personal data. Invalid
+onboarding input was not sent to production (covered by 11 backend cases and the browser test).
+
+## Deploying steps 5 and 6 together
+
+Two migrations, applied in this order by one `prisma migrate deploy` (each in its own transaction):
+
+| # | Migration | What it adds | Existing data |
+|---|---|---|---|
+| 1 | `20261112180000_staff_management` | `users.mustChangePassword` (default `false`); triggers `users_role_transition` (only ADMIN ↔ AUDITOR), `accounts_owner_is_holder` (staff own no customer accounts), deferred `users_keep_one_active_admin` | unchanged |
+| 2 | `20261112210000_audit_hash_chain` | `audit_logs.chainSeq / prevHash / hash`, functions `audit_row_hash` and `audit_chain_problems`, trigger `audit_logs_chain` | audit records are **chained in their original order**; their content is not changed (the append-only trigger is switched off for that one `UPDATE` inside the migration and switched on again) |
+
+No new environment variables, no Render or Vercel setting changes, no new privileges for `ledgerline_api` (it already has
+`SELECT, INSERT` on `audit_logs` and `UPDATE` on `users`; the functions are executable by every role and read-only).
+
+**Rehearsed locally (2026-11-12):** a copy of the development database was rolled back to the step 4 state with both rollback scripts
+(step 6, then step 5 – as production is now), both migrations applied (≈ 1 s): all data fingerprints (60 users, 169 transactions,
+950 audit records) identical, `verify-db` 17/17 with the chain intact, readiness all `ok`, a login and a deposit worked afterwards.
+
+### 0. Pre-flight (read-only – run only with approval, step 6 work was local-only)
+
+- Production state: exactly 5 migrations applied; none of the new columns, triggers or functions exist; 0 staff own customer
+  accounts; at least one active admin; the size of `audit_logs` (the backfill touches every row once – a few hundred rows take
+  milliseconds); readiness all `ok`; `verify-db` 15/15 (the step 4 checks – the deployed scripts).
+- Create a Neon branch `pre-step56` from production as a restore point (Neon console → Branches → New branch, current point in time).
+- `.env.production` unchanged (both URLs as for step 4).
+
+### 1. Migrate (from your computer)
+
+```bash
+cd ~/Documents/snovasys/LedgerLine/backend
+npm run db:prepare:production        # NOT --with-demo
+```
+Expected: `Applying migration 20261112180000_staff_management`, `Applying migration 20261112210000_audit_hash_chain`, the role table
+unchanged with ✅, `SYSTEM account ready`, `Demo data was not touched`, and `✅ Database state verified: 17 checks passed`
+(including "No staff member owns a customer account" and "Audit trail hash chain intact").
+
+### 2. Push right away
+
+Push the step 5 + step 6 commits. Render builds and switches only when `/api/health/ready` is 200 – which needs all the new triggers
+(`schema`). If step 1 had not run, the new version stays offline and the old one keeps serving.
+
+**While the old (step 4) version still serves after step 1:** it writes audit records without the chain columns – the trigger fills
+them in (they are NOT NULL, so nothing can be written unchained); it never changes roles or creates staff; `mustChangePassword` has a
+default. Nothing in it reads the new columns. (Reasoned from the code and the schema; the old code itself was not run against the
+migrated schema.)
+
+### 3. Verify
+
+1. `GET /api/health/ready` → 200, all four checks `ok`; `GET /api/admin/overview` and `GET /api/audit-logs/verify` → 401 without signing in.
+2. `verify-db` against production as `ledgerline_api` → 17/17.
+3. With approval (they create records): `npm run verify:deployment -- https://ledger-line-umber.vercel.app` → **29/29**, including
+   "holder cannot open the admin overview or staff list (403)" and "audit trail hash chain verifies (auditor)".
+4. Note the chain head (`head.chainSeq` and `head.hash` from `/api/audit-logs/verify`) somewhere outside the system – e.g. in your
+   own notes – and repeat that now and then. It is what makes a consistent rewrite of the newest records detectable.
+5. In the app: Staff → Add staff member works; the admin and auditor dashboards show "Audit trail intact".
+
+### Rollback strategy
+
+| Situation | What to do | Data |
+|---|---|---|
+| A migration fails | PostgreSQL rolls that migration back completely; Render keeps the old version. `npx prisma migrate resolve --rolled-back <name>`, fix, run step 1 again (procedure rehearsed for step 4) | unchanged |
+| Migration 1 succeeded, migration 2 failed | Migration 1 stays applied – compatible with the old version (see above). Resolve and re-run as above | unchanged |
+| Deploy fails / new version misbehaves | Render keeps or rolls back to the previous deploy (Render → Events → Rollback); the schema stays and is compatible. Fix forward | unchanged |
+| The migrations must be undone | Only while the step 4 code serves: `psql "<owner connection>" -f backend/prisma/rollbacks/20261112210000_audit_hash_chain.down.sql`, then `…/20261112180000_staff_management.down.sql` (this order) – both tested on a copy | the chain values and `mustChangePassword` are removed; users, accounts, transactions, ledger and audit records stay |
+| Something unforeseen | Neon → restore production from the `pre-step56` branch | **everything written after the branch was created is lost** – last resort |
+
+After a successful deploy and a few days of normal operation, delete the `pre-step4` and `pre-step56` branches.
+
+### Step 5 details
+
+Migration 1 was also rehearsed on its own (rollback script first, then the migration: all data identical, 16/16); production was
+checked read-only during step 5: 0 staff own customer accounts, 1 active admin, migration not applied. In the app afterwards:
+**Staff → Add staff member** creates further administrators/auditors; the temporary password is shown once.

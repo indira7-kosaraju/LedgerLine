@@ -16,6 +16,8 @@ import TransactionsPage from './pages/TransactionsPage'
 import TransactionDetailsPage from './pages/TransactionDetailsPage'
 import MoneyMovementPage from './pages/MoneyMovementPage'
 import AdminUsersPage from './pages/AdminUsersPage'
+import AdminUserDetailsPage from './pages/AdminUserDetailsPage'
+import AdminStaffPage from './pages/AdminStaffPage'
 import LedgerPage from './pages/LedgerPage'
 import ProfilePage from './pages/ProfilePage'
 import OnboardingPage from './pages/OnboardingPage'
@@ -60,6 +62,8 @@ export default function App() {
                 {/* Admin only */}
                 <Route element={<ProtectedRoute roles={['ADMIN']} />}>
                   <Route path="admin/users" element={<AdminUsersPage />} />
+                  <Route path="admin/users/:id" element={<AdminUserDetailsPage />} />
+                  <Route path="admin/staff" element={<AdminStaffPage />} />
                 </Route>
               </Route>
             </Route>

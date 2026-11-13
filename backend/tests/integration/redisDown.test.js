@@ -22,6 +22,9 @@ test('login, registration and change-password are refused with 503 – never let
 
   const change = await request(app).post('/api/auth/change-password').set(auth).send({ currentPassword: 'Secret123', newPassword: 'NewSecret456' });
   expect(change.status).toBe(503);
+
+  // Step 6: each refusal is recorded (outcome ERROR – the limiter could not decide)
+  expect(await prisma.auditLog.count({ where: { action: 'AUTH_RATE_LIMIT_UNAVAILABLE', outcome: 'ERROR', createdAt: { gte: new Date(started) } } })).toBeGreaterThanOrEqual(3);
 });
 
 test('the rest of the API keeps working (general limit fails open): accounts and a deposit', async () => {

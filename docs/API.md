@@ -56,9 +56,9 @@ Every error has the same shape:
 |---|---|---|
 | 400 | Invalid input | `VALIDATION_ERROR`, `INVALID_JSON`, `SAME_ACCOUNT`, `IDEMPOTENCY_KEY_REQUIRED`, `IDEMPOTENCY_KEY_INVALID`, `CANNOT_CHANGE_OWN_STATUS` |
 | 401 | Not signed in / session invalid | `UNAUTHENTICATED`, `INVALID_CREDENTIALS`, `SESSION_REVOKED` |
-| 403 | Signed in but not allowed | `FORBIDDEN`, `NOT_OWNER`, `CSRF_REJECTED`, `ONBOARDING_INCOMPLETE` |
+| 403 | Signed in but not allowed | `FORBIDDEN`, `NOT_OWNER`, `CSRF_REJECTED`, `ONBOARDING_INCOMPLETE`, `PASSWORD_CHANGE_REQUIRED`, `ACTOR_NOT_AUTHORIZED` |
 | 404 | Not found | `NOT_FOUND`, `ACCOUNT_NOT_FOUND`, `DESTINATION_NOT_FOUND` |
-| 409 | Conflict with existing data | `EMAIL_TAKEN`, `ONBOARDING_ALREADY_COMPLETE`, `ACCOUNT_LIMIT_REACHED`, `STATUS_UNCHANGED`, `ACCOUNT_CLOSED`, `BALANCE_NOT_ZERO`, `IDEMPOTENCY_IN_PROGRESS` |
+| 409 | Conflict with existing data | `EMAIL_TAKEN`, `ONBOARDING_ALREADY_COMPLETE`, `ROLE_UNCHANGED`, `LAST_ACTIVE_ADMIN`, `ACCOUNT_LIMIT_REACHED`, `STATUS_UNCHANGED`, `ACCOUNT_CLOSED`, `BALANCE_NOT_ZERO`, `IDEMPOTENCY_IN_PROGRESS` |
 | 413 | Body larger than 10 KB | `PAYLOAD_TOO_LARGE` |
 | 422 | Valid request, refused by a business rule | `INSUFFICIENT_FUNDS`, `AMOUNT_EXCEEDS_LIMIT`, `ACCOUNT_NOT_ACTIVE`, `DESTINATION_NOT_ACTIVE`, `IDEMPOTENCY_KEY_REUSED` |
 | 429 | Too many requests (`Retry-After` header in seconds) | `RATE_LIMITED` |
@@ -101,8 +101,14 @@ List endpoints accept `page` (default 1) and `limit` (default 20, max 100) and r
 | GET | [/ledger/entries](#get-ledgerentries) | ✅ | ADMIN, AUDITOR |
 | GET | [/ledger/verify](#get-ledgerverify) | ✅ | ADMIN, AUDITOR |
 | GET | [/audit-logs](#get-audit-logs) | ✅ | ADMIN, AUDITOR |
+| GET | [/admin/overview](#get-adminoverview) | ✅ | ADMIN |
 | GET | [/admin/users](#get-adminusers) | ✅ | ADMIN |
+| GET | [/admin/users/:id](#get-adminusersid) | ✅ | ADMIN |
 | PATCH | [/admin/users/:id/status](#patch-adminusersidstatus) | ✅ | ADMIN |
+| POST | [/admin/users/:id/revoke-sessions](#post-adminusersidrevoke-sessions) | ✅ | ADMIN |
+| GET | [/admin/staff](#get-adminstaff) | ✅ | ADMIN |
+| POST | [/admin/staff](#post-adminstaff) | ✅ + your password | ADMIN |
+| PATCH | [/admin/staff/:id/role](#patch-adminstaffidrole) | ✅ + your password | ADMIN |
 
 ---
 
@@ -176,6 +182,14 @@ complete [onboarding](#onboarding) before opening accounts. Rate limit: 10 per h
 }
 ```
 **Errors:** `400 VALIDATION_ERROR` (with `details` per field) · `409 EMAIL_TAKEN` · `429 RATE_LIMITED` · `503 SERVICE_UNAVAILABLE`
+
+Password rules (step 6, also for change-password and the first-admin bootstrap): besides the character rules, very common passwords
+(e.g. `Password123`, `Welcome1`, `Admin@123`) and passwords containing the name part of the email (`asha.rao@…` → `asha`, `rao`,
+`asha.rao`, parts of 4+ characters) are refused:
+```json
+{ "error": { "code": "VALIDATION_ERROR", "message": "Validation failed",
+             "details": [{ "field": "password", "message": "This password is too common – choose a less predictable one" }] } }
+```
 
 ### POST /auth/login
 
@@ -527,7 +541,13 @@ Recomputes the books from every ledger entry in one consistent snapshot.
 
 ### GET /audit-logs
 
-**Query:** `page`, `limit`, `outcome` (`SUCCESS`/`REFUSED`/`ERROR`), `action` (exact) or `actionPrefix` (e.g. `TXN_`), `actorId`, `entityId`
+**Query:** `page`, `limit`, `outcome` (`SUCCESS`/`REFUSED`/`ERROR`), `action` (exact) or `actionPrefix` (e.g. `TXN_`), `actorId`, `entityId`,
+`entityType` (`User`/`Account`/`Transaction`), `from` and `to` (ISO date or date-time; `from` ≤ time < `to`, `from` must be before `to`).
+Newest first (by `chainSeq`).
+
+Every record has `chainSeq` (its position in the tamper-evident chain, a string), `prevHash` and `hash` (step 6 – see
+[GET /audit-logs/verify](#get-audit-logsverify)). Metadata never contains passwords, tokens or cookies: keys like `password`,
+`newPassword`, `token`, `cookie` are stored as `"[REDACTED]"` at any depth, and long text is cut at 500 characters.
 
 **Response 200** (`?outcome=REFUSED&actionPrefix=TXN_&limit=1`)
 ```json
@@ -538,31 +558,157 @@ Recomputes the books from every ledger entry in one consistent snapshot.
               "actor": { "id": "01d46546-…", "email": "asha.holder@example.com", "role": "ACCOUNT_HOLDER" } }],
   "page": 1, "limit": 1, "total": 2743 }
 ```
+(captured before step 6 – records now also carry `"chainSeq": "2744", "prevHash": "…", "hash": "…"`)
+
+**Security events recorded since step 6** (besides every sign-in, change and refusal before):
+
+| Action | When |
+|---|---|
+| `AUTH_SESSION_REJECTED` (`SESSION_REVOKED` / `USER_INACTIVE`) | a correctly signed token is used after logout, a password or role change, or after the user was deactivated |
+| `AUTH_RATE_LIMITED` (reason = limiter: `login-ip`, `login-account`, `register`) | a sign-in, registration or password confirmation is blocked with 429 |
+| `AUTH_RATE_LIMIT_UNAVAILABLE` (outcome `ERROR`) | sign-in refused with 503 because Redis is unreachable |
+| `USER_VIEW_DETAILS` | an admin opens a user's details (personal data, even though minimised) |
+
+### GET /audit-logs/verify
+
+Recomputes the whole hash chain in the database: every record must follow its predecessor without a gap, link to its hash, and still
+hash to the value stored when it was written. ADMIN and AUDITOR.
+
+**Response 200** (captured locally)
+```json
+{ "ok": true, "records": 987,
+  "head": { "chainSeq": "987", "hash": "e99629b7bd0c6097f4ed538510f37333925234d4e520ba394b4dde9ef3d1f538", "createdAt": "2026-11-12T13:55:12.100Z" },
+  "problems": [], "checkedAt": "2026-11-12T13:55:12.140Z" }
+```
+**Response 500** – the chain is broken. Shape as asserted by `auditSecurity.test.js` › "after real tampering → 500 with the broken
+record" (numbers are placeholders):
+```json
+{ "ok": false, "records": "<count>", "head": { "…": "…" },
+  "problems": [{ "chainSeq": "<the changed record>", "problem": "content changed after it was written" }], "checkedAt": "…" }
+```
+Possible problems: `content changed after it was written` · `does not link to the previous record` (a record was rewritten with a
+fresh hash) · `records missing before this one (gap in the sequence)`. Note the `head` somewhere outside the system from time to time:
+if the chain were ever rewritten consistently from some record on, the head would no longer match.
 
 ---
 
 ## Admin (ADMIN)
 
+Every route here needs the ADMIN role (auditors and holders get `403 FORBIDDEN`, audited as `AUTHZ_DENIED`). Personal data is
+minimised: user lists show public fields only; user details show the age (not the date of birth), a masked mobile number and no PIN
+code. Every change is written to the audit log, with the admin's optional `reason` as `metadata.note`.
+
+**Users with a temporary password** (new staff, see [POST /admin/staff](#post-adminstaff)) get `403 PASSWORD_CHANGE_REQUIRED` on
+every route except `GET /auth/me` and `POST /auth/change-password` until they have chosen their own password:
+```json
+{ "error": { "code": "PASSWORD_CHANGE_REQUIRED", "message": "Change your temporary password first" } }
+```
+
+### GET /admin/overview
+
+The dashboard figures, computed by the database (counts and sums only).
+
+**Response 200** (captured locally; `recentSignups` and `recentAdminActions` shortened to one item each – the real lists have 5 and 8)
+```json
+{ "users": { "total": 56, "active": 56, "inactive": 0,
+             "byRole": { "ADMIN": { "active": 2, "inactive": 0 }, "AUDITOR": { "active": 2, "inactive": 0 }, "ACCOUNT_HOLDER": { "active": 52, "inactive": 0 } },
+             "pendingOnboarding": 0, "passwordChangePending": 0 },
+  "accounts": { "total": 65, "active": 65, "frozen": 0, "closed": 0 },
+  "customerFunds": { "paise": "14608700", "formatted": "₹1,46,087.00", "currency": "INR" },
+  "transactions": { "total": 158, "last24h": 11 }, "refusedLast24h": 26,
+  "recentSignups": [{ "id": "b6a1be4d-…", "email": "docs-onb-…@example.com", "fullName": "Docs Onboarding", "role": "ACCOUNT_HOLDER",
+                      "isActive": true, "onboardingStatus": "APPROVED", "mustChangePassword": false, "createdAt": "…", "updatedAt": "…" }],
+  "recentAdminActions": [{ "action": "USER_SET_STATUS", "outcome": "SUCCESS", "entityType": "User", "entityId": "205f63cf-…",
+                           "metadata": { "from": false, "to": true }, "createdAt": "…", "actor": { "email": "admin@ledgerline.local", "role": "ADMIN" }, "…": "…" }],
+  "generatedAt": "2026-11-12T13:13:45.884Z" }
+```
+
 ### GET /admin/users
 
-**Query:** `page`, `limit`, `role`, `status` (`ACTIVE`/`INACTIVE`), `q` (name or email)
+**Query:** `page`, `limit`, `role`, `status` (`ACTIVE`/`INACTIVE`), `onboarding` (`PENDING_PROFILE`/`APPROVED`), `q` (name or email)
 
 **Response 200**
 ```json
 { "items": [{ "id": "388d4358-…", "email": "ravi.holder@example.com", "fullName": "Ravi Kumar", "role": "ACCOUNT_HOLDER",
-              "isActive": true, "createdAt": "…", "updatedAt": "…" }],
+              "isActive": true, "onboardingStatus": "APPROVED", "mustChangePassword": false, "createdAt": "…", "updatedAt": "…" }],
   "page": 1, "limit": 20, "total": 8 }
 ```
+
+### GET /admin/users/:id
+
+**Response 200** (captured locally – this demo holder was onboarded before profiles existed, so `profile` is `null`; with a profile it is
+`{ "age": 36, "phone": "+91 ••••••3210", "city": "Bengaluru", "state": "Karnataka", "occupation": "SALARIED" }`)
+```json
+{ "user": { "id": "452de46c-…", "email": "asha.holder@example.com", "fullName": "Asha Verma", "role": "ACCOUNT_HOLDER", "isActive": true,
+            "onboardingStatus": "APPROVED", "mustChangePassword": false, "createdAt": "…", "updatedAt": "…" },
+  "profile": null,
+  "accounts": { "total": 2, "active": 2, "frozen": 0, "closed": 0, "totalBalance": { "paise": "550000", "formatted": "₹5,500.00", "currency": "INR" } },
+  "activity": { "transactions": 5, "lastLoginAt": "2026-11-12T09:16:25.287Z", "failedLogins24h": 0 } }
+```
+**Errors:** `404 NOT_FOUND`
 
 ### PATCH /admin/users/:id/status
 
 Activate or deactivate a user. Any change also **revokes all of that user's existing sessions**.
 
-**Request** `{ "isActive": false }`
+**Request** `{ "isActive": false, "reason": "Suspicious activity reported" }` – `reason` optional (≤ 200 characters, audit log only)
 
 **Response 200** – `{ "user": { … } }`
 
-**Errors:** `400 CANNOT_CHANGE_OWN_STATUS` · `400 VALIDATION_ERROR` (e.g. sending `role`) · `403 FORBIDDEN` · `404 NOT_FOUND`
+**Errors:** `400 CANNOT_CHANGE_OWN_STATUS` · `400 VALIDATION_ERROR` (e.g. sending `role`) · `403 FORBIDDEN` ·
+`403 ACTOR_NOT_AUTHORIZED` (you were deactivated or demoted a moment ago) · `404 NOT_FOUND` · `409 STATUS_UNCHANGED` ·
+`409 LAST_ACTIVE_ADMIN`
 ```json
 { "error": { "code": "CANNOT_CHANGE_OWN_STATUS", "message": "You cannot change your own status" } }
+```
+
+### POST /admin/users/:id/revoke-sessions
+
+"Sign out everywhere": every existing session of the user ends (e.g. a lost phone); the user stays active and can sign in again.
+
+**Request** `{ "reason": "Lost phone" }` (optional) · **Response 200** – `{ "user": { … } }`
+
+**Errors:** `400 CANNOT_REVOKE_OWN_SESSIONS` (use logout) · `404 NOT_FOUND`
+
+### GET /admin/staff
+
+Administrators and auditors, newest first. **Query:** `page`, `limit`, `role` (`ADMIN`/`AUDITOR`), `status`, `q`.
+
+### POST /admin/staff
+
+Creates a staff account. Requires **your own password**; wrong passwords count toward the failed-login limits (per IP and per
+account). An existing user is never turned into staff. The new person gets a **random temporary password**, returned **only in
+this response** (`Cache-Control: no-store`), never stored in readable form and never logged; they must change it at the first
+sign-in.
+
+**Request**
+```json
+{ "email": "new.auditor@example.com", "fullName": "New Auditor", "role": "AUDITOR", "currentPassword": "<your password>" }
+```
+`role`: `ADMIN` or `AUDITOR` only. Any other field (e.g. `mustChangePassword`, `isActive`) → `400`.
+
+**Response 201** (captured locally; the password replaced here)
+```json
+{ "user": { "id": "43ea2386-…", "email": "docs-auditor-…@example.com", "fullName": "Docs Auditor", "role": "AUDITOR", "isActive": true,
+            "onboardingStatus": "APPROVED", "mustChangePassword": true, "createdAt": "…", "updatedAt": "…" },
+  "temporaryPassword": "<20 characters, shown once>" }
+```
+**Errors:** `400 INVALID_CURRENT_PASSWORD` · `400 VALIDATION_ERROR` · `409 EMAIL_TAKEN` · `429 RATE_LIMITED` · `503 SERVICE_UNAVAILABLE`
+```json
+{ "error": { "code": "INVALID_CURRENT_PASSWORD", "message": "Your password is incorrect", "details": [{ "field": "currentPassword", "message": "Your password is incorrect" }] } }
+```
+
+### PATCH /admin/staff/:id/role
+
+ADMIN ↔ AUDITOR only. Requires your own password; ends all of that person's sessions. The database refuses any change between
+account holders and staff, and refuses to leave no active administrator.
+
+**Request** `{ "role": "ADMIN", "currentPassword": "<your password>", "reason": "Team lead" }`
+
+**Response 200** – `{ "user": { …, "role": "ADMIN" } }`
+
+**Errors:** `400 CANNOT_CHANGE_OWN_ROLE` · `400 ROLE_CHANGE_NOT_ALLOWED` (the target is an account holder) · `400 INVALID_CURRENT_PASSWORD` ·
+`404 NOT_FOUND` · `409 ROLE_UNCHANGED` · `409 LAST_ACTIVE_ADMIN` · `429 RATE_LIMITED`
+```json
+{ "error": { "code": "ROLE_CHANGE_NOT_ALLOWED", "message": "Only staff roles can be changed – account holders never become staff" } }
 ```

@@ -51,23 +51,33 @@ can be re-derived from the ledger at any time ("a ledger you can prove").
 - "Retry safely" after a network error – never pays twice.
 
 **Administrators**
-- System overview (users, accounts, customer funds, transactions, refused attempts, ledger integrity).
-- Freeze, unfreeze and close accounts; activate and deactivate users (revokes their sessions immediately).
-- Cannot move money (separation of duties).
+- Dashboard computed by the database: users by role and status, pending onboardings, staff with temporary passwords, accounts by
+  status, customer funds, transactions (total and last 24 h), refused attempts, recent admin actions, newest users, ledger integrity.
+- User management: search and filter (role, status, onboarding), user details with minimised personal data (age, masked phone),
+  activate / deactivate and "sign out everywhere" – each with an optional reason in the audit log.
+- Staff management: create administrators and auditors (a temporary password shown once, which must be changed at the first sign-in),
+  switch ADMIN ↔ AUDITOR – both confirmed with the admin's own password. Account holders can never become staff; the last active
+  admin can never be removed (both also enforced by the database).
+- Freeze, unfreeze and close accounts. Cannot move money (separation of duties).
 
 **Auditors**
-- Read-only access to all accounts, statements, transactions, the raw ledger and the audit log.
+- Read-only access to all accounts, statements, transactions, the raw ledger and the audit log (filter by outcome, category, entity
+  and date; verify the audit trail's hash chain).
 - Live ledger verification and a list of refused transaction attempts.
 
 **Platform**
 - Double-entry ledger with database-enforced integrity; idempotent money movement; row-level locking.
 - Role-based access control checked on the server for every request; full audit trail including refusals.
+- **Tamper-evident audit trail:** append-only and hash-chained by the database (SHA-256, gapless sequence); a changed, removed or
+  reordered record is detected and named ("Audit trail integrity" for admins and auditors). Secrets are redacted from audit data;
+  rejected sessions, sign-in blocks and admins' access to personal data are recorded.
+- Passwords: character rules, very common passwords and passwords containing the email name are refused; bcrypt cost 12.
 - Onboarding cannot be skipped: the API refuses accounts and money movement before approval, and so does the database (triggers).
 - Helmet, strict CORS, CSRF protection, input validation, safe error responses.
 - Rate limits in **Redis** (shared by all server instances, survive restarts): per IP, plus a per-account login lockout;
   sign-in fails closed (503) if Redis is down.
 - Liveness and readiness checks (`/api/health/live`, `/api/health/ready`: database, Redis, ledger protections, limited DB role).
-- 385 backend tests, 27 browser tests, 15 frontend unit tests.
+- 436 backend tests, 35 browser tests, 16 frontend unit tests.
 
 ## 4. Technology stack
 
@@ -278,8 +288,10 @@ Full reference with request bodies, real responses and error codes: **[docs/API.
 | GET | `/api/transactions` | ✅ | any (holders see their own) |
 | GET | `/api/transactions/:id` | ✅ | involved holder, ADMIN, AUDITOR |
 | GET | `/api/ledger/entries` · `/api/ledger/verify` | ✅ | ADMIN, AUDITOR |
-| GET | `/api/audit-logs` | ✅ | ADMIN, AUDITOR |
-| GET | `/api/admin/users` · PATCH `/api/admin/users/:id/status` | ✅ | ADMIN |
+| GET | `/api/audit-logs` · `/api/audit-logs/verify` | ✅ | ADMIN, AUDITOR |
+| GET | `/api/admin/overview` · `/api/admin/users` · `/api/admin/users/:id` | ✅ | ADMIN |
+| PATCH · POST | `/api/admin/users/:id/status` · `/api/admin/users/:id/revoke-sessions` | ✅ | ADMIN |
+| GET · POST · PATCH | `/api/admin/staff` · `/api/admin/staff/:id/role` | ✅ + own password for changes | ADMIN |
 
 ## 13. Installation
 
@@ -359,11 +371,11 @@ and to the local Redis, database 1 (`redis://127.0.0.1:6379/1`).
 
 | Command (folder) | What it covers | Result |
 |---|---|---|
-| `npm test` (backend) | Jest + Supertest: auth, authorization, accounts, transactions, **financial integrity**, **idempotency**, **concurrency**, ledger tampering, security audit, rate limits **in Redis** (incl. Redis down), readiness, **first-admin bootstrap**, change password, database roles, **onboarding**, demo seed (no duplicates) | 385 tests |
-| `npm test` (frontend) | amount parsing (no floating point), validation (incl. onboarding), error messages, idempotency keys | 15 tests |
-| `npm run test:e2e` (frontend) | Playwright in Chrome: registration, login, protected routes, roles, money forms, history, error handling, lost-response retry, change password, onboarding | 27 tests |
+| `npm test` (backend) | Jest + Supertest: auth, authorization, accounts, transactions, **financial integrity**, **idempotency**, **concurrency**, ledger tampering, security audit, rate limits **in Redis** (incl. Redis down), readiness, **first-admin bootstrap**, change password, database roles, **onboarding**, demo seed (no duplicates), **admin / user / staff management**, **audit hash chain and security events** | 436 tests |
+| `npm test` (frontend) | amount parsing (no floating point), validation (incl. onboarding and staff), error messages, idempotency keys | 16 tests |
+| `npm run test:e2e` (frontend) | Playwright in Chrome: registration, login, protected routes, roles, money forms, history, error handling, lost-response retry, change password, onboarding, admin dashboard, user details, staff lifecycle, audit trail verification, password rules | 35 tests |
 | `npm run smoke` (backend) | end-to-end API check against your running dev server | 61 checks |
-| `npm run verify:db` (backend) | read-only check of the real database (incl. "connected as a limited role", "every account owner onboarded") | 15 checks |
+| `npm run verify:db` (backend) | read-only check of the real database (incl. "connected as a limited role", "every account owner onboarded", "no staff owns a customer account", "audit trail hash chain intact") | 17 checks |
 
 One-time setup for the test database:
 
@@ -391,7 +403,7 @@ all `ok` – see docs/DEPLOYMENT.md. Step 4 – onboarding – is live as well: 
 - `npm run db:prepare:production` – migrations, API role privileges, SYSTEM account and verification on the production database;
   demo data only with `-- --with-demo`
   (reads only `backend/.env.production`; never copies your private admin).
-- `npm run verify:deployment -- <url>` – 27 end-to-end checks against the live site, including onboarding, idempotency, the ₹800 + ₹700 race and that the public demo admin is disabled.
+- `npm run verify:deployment -- <url>` – 29 end-to-end checks against the live site, including the audit trail's hash chain, including onboarding, admin pages refused to holders, idempotency, the ₹800 + ₹700 race and that the public demo admin is disabled.
 
 The whole setup was rehearsed locally first: production build with the same headers and `/api` forwarding, backend started exactly
 like Render (clean install, `NODE_ENV=production`, no `.env`, empty database) – all 24 deployment checks of that version passed (2026-11-08).
@@ -432,6 +444,10 @@ The password is typed twice at a hidden prompt and never printed or stored. The 
 the email belongs to an existing user, uses a database lock so two runs can't both succeed, and writes an `ADMIN_BOOTSTRAP` audit
 entry. Every user can change their password on the **Profile** page (other sessions are signed out).
 
+After that, further administrators and auditors are created **in the app**: **Staff → Add staff member** (your own password confirms
+it). The new person receives a temporary password that is shown once – hand it over through a secure channel – and must choose their
+own password at the first sign-in before anything else works.
+
 ## 18. Screenshots
 
 | | |
@@ -447,6 +463,8 @@ entry. Every user can change their password on the **Profile** page (other sessi
 
 **Known limitations** (details in [THREATS.md](THREATS.md)):
 - Onboarding has no real identity check (KYC): any valid, made-up profile is approved automatically – never enter real personal data.
+- Admins are powerful: no MFA or two-person approval; temporary staff passwords are handed over outside the system.
+- The audit chain has no external anchor: note its head (`/api/audit-logs/verify`) somewhere else now and then.
 - Whoever holds the database owner password can still disable the ledger triggers (the API itself runs as the limited `ledgerline_api`).
 - The per-account lockout can be triggered by anyone who knows an email address (10 wrong passwords lock it for up to 15 minutes);
   no CAPTCHA or MFA. If Redis is down, nobody can sign in until it is back (by design – fail closed).

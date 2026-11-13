@@ -15,7 +15,7 @@ const EMPTY = { currentPassword: '', newPassword: '', confirmPassword: '' }
 
 // Every role: who am I, and change my own password.
 export default function ProfilePage() {
-  const { user } = useAuth()
+  const { user, updateUser } = useAuth()
   const toast = useToast()
 
   const [values, setValues] = useState(EMPTY)
@@ -39,8 +39,9 @@ export default function ProfilePage() {
     setSubmitting(true)
     try {
       // confirmPassword is only checked here – the backend rejects unknown fields.
-      await changePassword({ currentPassword: values.currentPassword, newPassword: values.newPassword })
+      const updated = await changePassword({ currentPassword: values.currentPassword, newPassword: values.newPassword })
       setValues(EMPTY)
+      if (updated) updateUser(updated) // e.g. the temporary-password restriction has ended
       toast.success('Password changed. You were signed out on all other devices.')
     } catch (error) {
       const fieldErrors = fieldErrorsFromApi(error)
@@ -54,6 +55,13 @@ export default function ProfilePage() {
   return (
     <>
       <PageHeader title="Profile" description="Your sign-in details and password." />
+
+      {user.mustChangePassword && (
+        <Alert tone="warning" title="Change your temporary password" className="mb-6">
+          An administrator created your account with a temporary password. Choose your own password below – until then
+          nothing else in LedgerLine is available.
+        </Alert>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>

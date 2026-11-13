@@ -29,6 +29,16 @@ const ACTION_LABELS = {
   ACCOUNT_MOVE_MONEY: 'Move money',
   ACCOUNT_MANAGE: 'Manage account',
   USER_SET_STATUS: 'User status change',
+  USER_REVOKE_SESSIONS: 'Sign out everywhere',
+  USER_CHANGE_ROLE: 'Role change',
+  USER_VIEW_DETAILS: 'View user details',
+  STAFF_CREATE: 'Create staff member',
+  ADMIN_BOOTSTRAP: 'First admin created',
+  ONBOARDING_COMPLETE: 'Onboarding',
+  AUTH_CHANGE_PASSWORD: 'Password change',
+  AUTH_SESSION_REJECTED: 'Rejected session',
+  AUTH_RATE_LIMITED: 'Rate limit reached',
+  AUTH_RATE_LIMIT_UNAVAILABLE: 'Rate limiter unavailable',
 }
 
 export const actionLabel = (action) => ACTION_LABELS[action] ?? humanize(action)

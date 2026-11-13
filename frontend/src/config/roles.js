@@ -16,6 +16,9 @@ const PERMISSIONS = {
   'ledger:read': ['ADMIN', 'AUDITOR'],
   'audit:read': ['ADMIN', 'AUDITOR'],
   'users:manage': ['ADMIN'],
+  'users:read': ['ADMIN'],
+  'admin:overview': ['ADMIN'],
+  'staff:manage': ['ADMIN'],
   'onboarding:own': ['ACCOUNT_HOLDER'],
 }
 
