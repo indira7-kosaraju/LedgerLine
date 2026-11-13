@@ -1,118 +1,224 @@
-# LedgerLine X – Money Movement with a Ledger You Can Prove
+<div align="center">
 
-A full-stack banking simulation where every rupee is traceable: deposits, withdrawals and transfers are written to a
-**double-entry ledger** that PostgreSQL itself keeps balanced, duplicates are impossible thanks to **idempotency keys**,
-and simultaneous requests can never overdraw an account.
+# LedgerLine — Secure Simulated Banking & Double-Entry Ledger Platform
 
-> ⚠️ **Simulated money only.** LedgerLine is a learning project. It is not connected to any bank or payment gateway.
+**Money movement with a ledger you can prove.**
 
-![Account holder dashboard](docs/screenshots/02-holder-dashboard.png)
+[Live app](https://ledger-line-umber.vercel.app/) · [API health](https://ledgerline-z5o2.onrender.com/api/health) · [Deployment guide](docs/DEPLOYMENT.md) · [API reference](docs/API.md) · [Threat model](THREATS.md)
+
+![React 19](https://img.shields.io/badge/React-19-d4a63a?style=flat-square&labelColor=101112)
+![Express 5](https://img.shields.io/badge/Express-5-d4a63a?style=flat-square&labelColor=101112)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17%20%2F%2018-d4a63a?style=flat-square&labelColor=101112)
+![Prisma 6](https://img.shields.io/badge/Prisma-6-d4a63a?style=flat-square&labelColor=101112)
+![Redis](https://img.shields.io/badge/Redis-rate%20limits-d4a63a?style=flat-square&labelColor=101112)
+![Tests](https://img.shields.io/badge/backend%20tests-436-4cd47b?style=flat-square&labelColor=101112)
+
+</div>
+
+> ⚠️ **Simulated money only.** LedgerLine is a learning and demonstration project. It is not a bank, holds no licence, and is not
+> connected to any bank or payment gateway. Never enter real personal or financial data.
+
+![LedgerLine landing page – Black & Gold design with live system status](docs/screenshots/ui-01-landing.png)
+
+---
 
 ## Contents
 
-1. [Overview](#1-overview) · 2. [Problem statement](#2-problem-statement) · 3. [Features](#3-features) · 4. [Technology stack](#4-technology-stack) ·
-5. [Architecture](#5-architecture) · 6. [Database schema](#6-database-schema) · 7. [Authentication workflow](#7-authentication-workflow) ·
-8. [Transaction workflow](#8-transaction-workflow) · 9. [Idempotency](#9-idempotency) · 10. [Concurrency protection](#10-concurrency-protection) ·
-11. [Ledger integrity](#11-ledger-integrity) · 12. [API endpoints](#12-api-endpoints) · 13. [Installation](#13-installation) ·
-14. [Environment variables](#14-environment-variables) · 15. [Testing](#15-testing) · 16. [Deployment](#16-deployment) ·
-17. [Demo credentials](#17-demo-credentials) · 18. [Screenshots](#18-screenshots) · 19. [Limitations and future enhancements](#19-limitations-and-future-enhancements) ·
-20. [Project documents](#20-project-documents)
+1. [Overview](#1-overview) · 2. [Live application](#2-live-application) · 3. [UI preview](#3-ui-preview) · 4. [Key features](#4-key-features) ·
+5. [Technology stack](#5-technology-stack) · 6. [System architecture](#6-system-architecture) · 7. [Banking and ledger design](#7-banking-and-ledger-design) ·
+8. [Database schema](#8-database-schema) · 9. [Security architecture](#9-security-architecture) · 10. [Roles and demo experience](#10-roles-and-demo-experience) ·
+11. [Testing and verification](#11-testing-and-verification) · 12. [Local setup](#12-local-setup) · 13. [Environment variables](#13-environment-variables) ·
+14. [Deployment](#14-deployment) · 15. [API endpoints](#15-api-endpoints) · 16. [Known limitations](#16-known-limitations) ·
+17. [Demo credentials](#17-demo-credentials) · 18. [Project highlights](#18-project-highlights) · 19. [Project documentation](#19-project-documentation)
 
 ---
 
 ## 1. Overview
 
-LedgerLine lets **account holders** open accounts, deposit simulated money, withdraw it and transfer it to anyone;
-**administrators** manage accounts and users; **auditors** inspect the ledger, every transaction and every refused attempt –
-read-only. The backend is the single source of truth: the React app never decides whether money may move.
+LedgerLine is a full-stack banking simulation. **Account holders** open accounts and deposit, withdraw and transfer simulated
+Indian rupees; **administrators** manage users, staff and accounts; **auditors** inspect everything read-only.
 
-## 2. Problem statement
+Moving money looks simple — subtract here, add there — but real systems fail in subtle ways:
 
-Moving money looks simple – subtract here, add there – but real systems fail in subtle ways:
+| Failure | Example | How LedgerLine prevents it |
+|---|---|---|
+| **Duplicates** | The response to a transfer is lost; the user retries and pays twice | Idempotency keys claimed inside the money transaction |
+| **Races** | ₹800 and ₹700 are withdrawn from a ₹1,000 account at the same moment | Row-level locks + a database `CHECK` on the balance |
+| **Partial writes** | The server crashes after debiting one account but before crediting the other | One PostgreSQL transaction – all or nothing |
+| **Silent tampering** | A balance or history row is changed directly in the database | Append-only triggers, deferred balance checks, hash-chained audit log |
 
-| Failure | Example |
+Every movement is recorded as a **double-entry ledger** transaction — one debit and one credit of the same amount — so every balance
+can be recomputed from history and **all balances always sum to ₹0**. The most important rules are enforced by **PostgreSQL itself**,
+not only by application code, and each of them is proven by automated tests (including tests that deliberately break a safeguard
+to show the tests notice).
+
+## 2. Live application
+
+| | URL |
 |---|---|
-| **Duplicates** | The network drops after a transfer succeeds; the user retries and pays twice. |
-| **Races** | ₹800 and ₹700 are withdrawn from a ₹1,000 account at the same moment and both succeed. |
-| **Partial writes** | The server crashes after debiting one account but before crediting the other. |
-| **Silent tampering** | A balance is changed directly in the database and nobody can tell. |
+| Frontend (Vercel) | <https://ledger-line-umber.vercel.app/> |
+| Backend API (Render) | <https://ledgerline-z5o2.onrender.com> — e.g. [`/api/health`](https://ledgerline-z5o2.onrender.com/api/health) |
+| Source code | <https://github.com/indira7-kosaraju/Nilcent> |
 
-LedgerLine is built so that each of these is **prevented by design and proven by automated tests** – and so that any balance
-can be re-derived from the ledger at any time ("a ledger you can prove").
+The backend runs on Render's free plan and sleeps when idle — the **first request after a pause can take up to a minute**.
 
-## 3. Features
+## 3. UI preview
 
-**Account holders**
-- Register and sign in (HttpOnly cookie session), then a short **onboarding**: demo profile (date of birth 18+, mobile number,
-  city, state, PIN code, occupation) and the current terms – approved automatically. Only then: open up to 5 accounts.
-- Deposit (simulated), withdraw, and transfer to own accounts or any account number – with a confirmation step and a receipt.
-- Transaction history with search and filters; details that never reveal the other party's balance.
-- Statements with a **ledger proof** (credits − debits = balance).
-- "Retry safely" after a network error – never pays twice.
+A dark **Black & Gold** design system (Tailwind CSS 4 tokens: deep black surfaces, metallic gold gradients, green/red status colours
+always paired with text), a gold classical-bank logo and favicon, and responsive layouts from phone to desktop.
+
+| | |
+|---|---|
+| ![Sign-in page with Evaluation & Demo Personas](docs/screenshots/ui-02-sign-in-personas.png) **Sign in** – branding panel and demo personas | ![Registration page](docs/screenshots/ui-03-register.png) **Create account** – live password checklist |
+| ![Customer dashboard](docs/screenshots/ui-04-customer-dashboard.png) **Customer dashboard** – balance from the database, quick actions | ![Accounts page](docs/screenshots/ui-05-accounts.png) **Accounts** – status and balances |
+| ![Transfer form](docs/screenshots/ui-06-transfer.png) **Transfer** – own account or any account number | ![Transaction history](docs/screenshots/ui-07-transactions.png) **Transaction history** – filters and direction |
+| ![Admin dashboard](docs/screenshots/ui-08-admin-dashboard.png) **Administrator overview** – computed by the database | ![User management](docs/screenshots/ui-09-admin-users.png) **User management** – search, filter, activate / deactivate |
+| ![Staff management](docs/screenshots/ui-10-admin-staff.png) **Staff management** – admins and auditors | ![Auditor dashboard](docs/screenshots/ui-11-auditor-dashboard.png) **Auditor dashboard** – audit-chain verification |
+| ![Audit log with integrity check](docs/screenshots/ui-12-audit-logs.png) **Audit log** – hash-chain check and filters | ![Mobile landing page](docs/screenshots/ui-13-mobile-landing.png) **Mobile** – responsive layout |
+
+<sub>Screenshots of the actual application, captured locally from the development database with the seeded dummy demo data
+(`example.com` addresses, simulated money).</sub>
+
+## 4. Key features
+
+**Customers (account holders)**
+- **Registration and sign-in** with an HttpOnly session cookie. Password rules: 8+ characters with upper- and lowercase letters and a
+  number; very common passwords and passwords containing the email name are refused.
+- **Onboarding** before any money moves: a demo profile (age 18+, mobile number, city, state, PIN code, occupation) and acceptance of the
+  current terms, approved automatically. The API *and* database triggers refuse accounts and money movement before approval.
+- **Accounts:** open up to 5; balances, statements with a ledger proof (credits − debits = balance).
+- **Deposits, withdrawals and transfers** (to own accounts or any account number) with a confirmation step and a receipt.
+- **Transaction history** with search and filters; details never reveal the other party's balance.
+- **"Retry safely"** after a network error — the same idempotency key is re-sent, so a payment is never made twice.
 
 **Administrators**
-- Dashboard computed by the database: users by role and status, pending onboardings, staff with temporary passwords, accounts by
-  status, customer funds, transactions (total and last 24 h), refused attempts, recent admin actions, newest users, ledger integrity.
-- User management: search and filter (role, status, onboarding), user details with minimised personal data (age, masked phone),
-  activate / deactivate and "sign out everywhere" – each with an optional reason in the audit log.
-- Staff management: create administrators and auditors (a temporary password shown once, which must be changed at the first sign-in),
-  switch ADMIN ↔ AUDITOR – both confirmed with the admin's own password. Account holders can never become staff; the last active
-  admin can never be removed (both also enforced by the database).
-- Freeze, unfreeze and close accounts. Cannot move money (separation of duties).
+- **Dashboard** computed by the database: users by role and status, pending onboardings, staff with temporary passwords, accounts by
+  status, customer funds, transactions, refused attempts, recent admin actions, ledger and audit-trail integrity.
+- **User management:** search and filter, user details with minimised personal data (age only, masked phone), activate / deactivate and
+  "sign out everywhere" — each with an optional reason in the audit log.
+- **Staff management:** create administrators and auditors (a temporary password shown once, which must be changed at first sign-in) and
+  switch ADMIN ↔ AUDITOR — both confirmed with the admin's own password. Account holders can never become staff and the last active admin
+  can never be removed (also enforced by database triggers).
+- Freeze, unfreeze and close accounts. Administrators **cannot move money** (separation of duties).
 
 **Auditors**
-- Read-only access to all accounts, statements, transactions, the raw ledger and the audit log (filter by outcome, category, entity
-  and date; verify the audit trail's hash chain).
-- Live ledger verification and a list of refused transaction attempts.
+- Read-only access to all accounts, statements, transactions, the raw ledger and the audit log (filters by outcome, category, entity and date).
+- Live **ledger verification** and **audit-trail hash-chain verification**, plus the list of refused transaction attempts.
 
 **Platform**
-- Double-entry ledger with database-enforced integrity; idempotent money movement; row-level locking.
-- Role-based access control checked on the server for every request; full audit trail including refusals.
-- **Tamper-evident audit trail:** append-only and hash-chained by the database (SHA-256, gapless sequence); a changed, removed or
-  reordered record is detected and named ("Audit trail integrity" for admins and auditors). Secrets are redacted from audit data;
-  rejected sessions, sign-in blocks and admins' access to personal data are recorded.
-- Passwords: character rules, very common passwords and passwords containing the email name are refused; bcrypt cost 12.
-- Onboarding cannot be skipped: the API refuses accounts and money movement before approval, and so does the database (triggers).
-- Helmet, strict CORS, CSRF protection, input validation, safe error responses.
-- Rate limits in **Redis** (shared by all server instances, survive restarts): per IP, plus a per-account login lockout;
-  sign-in fails closed (503) if Redis is down.
-- Liveness and readiness checks (`/api/health/live`, `/api/health/ready`: database, Redis, ledger protections, limited DB role).
-- 436 backend tests, 35 browser tests, 16 frontend unit tests.
+- Double-entry ledger with database-enforced integrity · idempotent money movement · row-level locking with deadlock retry.
+- Role-based access control checked on the server for every request; a complete audit trail **including refused attempts**.
+- **Tamper-evident audit trail:** append-only and SHA-256 hash-chained by the database with a gapless sequence; a changed, removed or
+  reordered record is detected and named. Secrets are redacted from audit metadata.
+- **Redis rate limiting** per IP plus a **per-account login lockout**; sign-in fails closed (503) if Redis is unavailable.
+- Liveness and readiness endpoints (`/api/health/live`, `/api/health/ready`: database, Redis, ledger protections, limited database role).
 
-## 4. Technology stack
+## 5. Technology stack
 
-| Layer | Technology |
+Versions are those in the repository's `package.json` / lock files.
+
+| Area | Technology |
 |---|---|
-| Frontend | React 19, Vite 8, Tailwind CSS 4, React Router 8, Axios |
-| Backend | Node.js (≥ 20), Express 5, Zod (validation), jsonwebtoken (JWT), bcrypt, Helmet, express-rate-limit, cookie-parser |
-| Database | PostgreSQL 17, Prisma ORM 6 |
-| Testing | Jest + Supertest (backend), Playwright (browser), Node test runner (frontend units) |
-| Deployment | Vercel (frontend), Render (backend), managed PostgreSQL – see [Deployment](#16-deployment) |
+| **Frontend** | React 19.3, React Router 8.5, Vite 8.3, Tailwind CSS 4.3, Axios 1.21 |
+| **Backend** | Node.js ≥ 20 (developed on 26), Express 5.3, Zod 4.6 (validation), jsonwebtoken 9 (JWT, HS256), bcrypt 6, Helmet 8, cors, cookie-parser |
+| **Database** | PostgreSQL (17 locally, 18 on Neon), Prisma ORM 6.19 — hand-written SQL constraints and triggers in the migrations |
+| **Cache and security** | Redis (node-redis 6.3) with express-rate-limit 8.7 + rate-limit-redis 6.0; Redis 7.4 locally (Docker), Render Key Value in production |
+| **Testing** | Jest 30 + Supertest 7 (backend), Playwright 1.65 in Chrome (browser), Node test runner (frontend units), oxlint |
+| **Deployment** | Vercel (frontend + `/api` rewrite), Render (backend, `render.yaml` Blueprint), Neon (managed PostgreSQL), Render Key Value (Redis) |
 
-## 5. Architecture
+## 6. System architecture
 
 ```mermaid
 flowchart LR
-  B["Browser<br/>React SPA"] -- "HTTPS · JSON<br/>HttpOnly session cookie<br/>Idempotency-Key" --> API
-  subgraph API["Express API"]
+  U["Browser<br/>React SPA"] -- HTTPS --> V["Vercel<br/>static React build<br/>CSP · HSTS headers"]
+  V -- "/api/* rewrite<br/>(same site → SameSite=Strict cookie works)" --> R
+  subgraph R["Render – Express API"]
     direction TB
-    M["Helmet · CORS · rate limit<br/>CSRF check · validation (Zod)"] --> A["authenticate<br/>(JWT + DB user + session version)"]
-    A --> R["authorize<br/>(role permission + ownership)"]
-    R --> S["services<br/>accounts · transactions · ledger · idempotency · audit"]
+    M["Helmet · CORS · CSRF check<br/>rate limits · Zod validation"] --> A["authenticate<br/>JWT + user + session version"]
+    A --> Z["authorize<br/>role permission + ownership"]
+    Z --> S["services<br/>accounts · transactions (moveMoney) · ledger<br/>idempotency · onboarding · admin · audit"]
   end
-  S -- "Prisma<br/>parameterised SQL" --> DB[("PostgreSQL<br/>constraints + ledger triggers")]
+  M <-- "counters, lockout" --> K[("Render Key Value<br/>Redis")]
+  S -- "Prisma · parameterised SQL<br/>as limited role ledgerline_api" --> N[("Neon PostgreSQL<br/>constraints · ledger triggers<br/>audit hash chain")]
+  D["Developer machine<br/>db:prepare:production"] -. "owner role – migrations only" .-> N
+  H["Render health check"] -. "/api/health/ready" .-> R
 ```
 
-- **Frontend** (`frontend/`): pages call small API services (`src/api/`), all through one Axios client that adds credentials and turns
-  every failure into a uniform error. Role checks in the UI only decide what to *show*.
-- **Backend** (`backend/`): `routes → middleware → controllers → services`. Money logic lives in one function, `moveMoney()`
-  (`src/services/transaction.service.js`).
-- **Database**: constraints and triggers enforce the most important rules even if application code is wrong.
+- **Frontend** (`frontend/`): pages call small API modules (`src/api/`) through one Axios client. Role checks in the UI only decide what
+  to *show*; the server decides what is *allowed*.
+- **Backend** (`backend/`): `routes → middleware → controllers → services`. All money movement goes through one function,
+  `moveMoney()` in `src/services/transaction.service.js`.
+- **Database:** the API connects as `ledgerline_api`, which can read and write rows but owns no tables and cannot change the schema or
+  disable triggers. Migrations run separately with the owner role, from the developer's machine.
+- **Redis** holds only rate-limit counters (no personal data); the key prefix separates environments.
 
-## 6. Database schema
+## 7. Banking and ledger design
+
+**Double-entry accounting.** Every transaction writes exactly two ledger entries of the same amount: a **DEBIT** on the account money
+leaves and a **CREDIT** on the account it reaches. A special **SYSTEM account** (`LL-SYSTEM-EXTERNAL`) represents money outside
+LedgerLine, so deposits and withdrawals are double-entry too:
+
+| Operation (₹1,000) | DEBIT | CREDIT |
+|---|---|---|
+| Deposit | SYSTEM account | customer account |
+| Withdrawal | customer account | SYSTEM account |
+| Transfer A → B | account A | account B |
+
+Because every debit has a matching credit, **all balances sum to ₹0** at all times (the SYSTEM account goes negative as customers deposit).
+Money is stored as `BIGINT` **paise** (₹5,000.00 = `500000`) — never floating point.
+
+**Rules enforced by PostgreSQL** — even if application code were wrong:
+
+| Rule | Enforced by |
+|---|---|
+| Customer balances never go below ₹0 | `CHECK` constraint |
+| Ledger entries, transactions and audit logs cannot be updated, deleted or truncated | append-only triggers |
+| Every new entry continues its account's running balance | `ledger_entries_check_chain` trigger |
+| At commit, every transaction has exactly one matching DEBIT and CREDIT | deferred `transactions_must_balance` trigger |
+| At commit, every changed balance equals its latest ledger balance | deferred `accounts_balance_matches_ledger` trigger |
+| Accounts and money movement only for onboarded customers; staff own no customer accounts | triggers |
+| At least one active administrator always remains | deferred `users_keep_one_active_admin` trigger |
+
+**One transfer, step by step**
+
+```mermaid
+sequenceDiagram
+  participant B as Browser
+  participant API as Express API
+  participant DB as PostgreSQL
+  B->>API: POST /api/transactions/transfer + Idempotency-Key: K
+  API->>API: validate · fingerprint = SHA-256(endpoint + body)
+  API->>DB: key K seen before? → replay stored result (422 if body differs)
+  note over API,DB: ONE PostgreSQL transaction – all or nothing
+  API->>DB: INSERT key K (UNIQUE – a duplicate waits here)
+  API->>DB: SELECT … FOR UPDATE both accounts, in sorted id order
+  API->>API: owner? active? onboarded? enough balance? within limits?
+  API->>DB: UPDATE balances · INSERT transaction + DEBIT + CREDIT + audit row
+  API->>DB: store the response on K, then COMMIT (deferred triggers re-check)
+  API-->>B: 201 {transaction, new balance}
+```
+
+**Idempotency.** The browser creates one random key per operation and sends it as `Idempotency-Key` (required). The key row is inserted
+**inside the same transaction** as the money movement under `UNIQUE(userId, key)`, so a committed movement always has exactly one key.
+
+| Retry | Result |
+|---|---|
+| Same key, same request | the **original** response with `Idempotent-Replayed: true` — nothing moves again |
+| Same key, different request | `422 IDEMPOTENCY_KEY_REUSED` |
+| Same key sent many times at once | duplicates wait on the unique index; exactly **one** transaction |
+
+**Concurrency.** Balances are checked on rows locked with `SELECT … FOR UPDATE`; accounts are locked in sorted id order to avoid
+deadlocks, and a reported deadlock is retried up to 3 times. The classic test — ₹800 and ₹700 withdrawn from ₹1,000 at the same moment —
+runs 20 times: always one success and one `INSUFFICIENT_FUNDS`, never a negative balance.
+
+**Verify at any time:** `GET /api/ledger/verify` (admin/auditor) recomputes every balance from the ledger; `npm run verify:db` runs
+17 read-only database checks.
+
+## 8. Database schema
 
 ```mermaid
 erDiagram
+  users ||--o| customer_profiles : "onboarding"
   users ||--o{ accounts : owns
   users ||--o{ transactions : initiates
   users ||--o{ idempotency_keys : sends
@@ -126,196 +232,123 @@ erDiagram
           string email UK
           string passwordHash "bcrypt"
           enum role "ADMIN | ACCOUNT_HOLDER | AUDITOR"
+          enum onboardingStatus
           bool isActive
+          bool mustChangePassword
           int sessionVersion "revokes old tokens" }
   accounts { uuid id PK
              string accountNumber UK "LL + 10 digits"
              enum type "CUSTOMER | SYSTEM"
              enum status "ACTIVE | FROZEN | CLOSED"
-             bigint balance "paise, CHECK >= 0 for customers"
-             uuid ownerId FK }
+             bigint balance "paise" }
   transactions { uuid id PK
                  string reference UK
                  enum type "DEPOSIT | WITHDRAWAL | TRANSFER"
-                 bigint amount "CHECK > 0"
-                 uuid fromAccountId FK
-                 uuid toAccountId FK
-                 uuid initiatedById FK }
-  ledger_entries { uuid id PK
-                   bigint entryNumber UK "global order"
-                   uuid transactionId FK
-                   uuid accountId FK
+                 bigint amount "CHECK > 0" }
+  ledger_entries { bigint entryNumber UK
                    enum direction "DEBIT | CREDIT"
                    bigint amount
                    bigint balanceAfter }
-  idempotency_keys { uuid id PK
-                     uuid userId FK "UNIQUE(userId, key)"
-                     string key
+  idempotency_keys { string key "UNIQUE(userId, key)"
                      string requestHash "SHA-256"
-                     int responseStatus
-                     json responseBody
-                     uuid transactionId FK }
-  audit_logs { uuid id PK
-               uuid actorId FK
+                     json responseBody }
+  audit_logs { bigint chainSeq UK "gapless"
                string action
                enum outcome "SUCCESS | REFUSED | ERROR"
-               string reason }
+               string prevHash
+               string hash "SHA-256" }
 ```
 
-- **Money is stored as `BIGINT` paise** (₹5,000.00 = `500000`) – never floating point.
-- A special **SYSTEM account** (`LL-SYSTEM-EXTERNAL`) represents money outside LedgerLine: deposits come from it and withdrawals go
-  to it, so **every** movement has a debit and a credit and **all balances always sum to ₹0**.
-- Schema: [`backend/prisma/schema.prisma`](backend/prisma/schema.prisma) · migrations (including hand-written constraints and
-  triggers): [`backend/prisma/migrations/`](backend/prisma/migrations/).
+Schema: [`backend/prisma/schema.prisma`](backend/prisma/schema.prisma) · migrations, including the hand-written constraints and triggers:
+[`backend/prisma/migrations/`](backend/prisma/migrations/) · rollback scripts: [`backend/prisma/rollbacks/`](backend/prisma/rollbacks/).
 
-## 7. Authentication workflow
+## 9. Security architecture
 
-```mermaid
-sequenceDiagram
-  participant B as Browser
-  participant API as Express API
-  participant DB as PostgreSQL
-  B->>API: POST /api/auth/login {email, password}
-  API->>DB: find user
-  API->>API: bcrypt.compare (dummy hash if unknown → equal timing)
-  API->>DB: audit SUCCESS / REFUSED (real reason)
-  API-->>B: 200 {user} + Set-Cookie ll_session (HttpOnly, SameSite=Strict, Path=/api)
-  B->>API: GET /api/accounts (cookie sent automatically)
-  API->>API: verify JWT (HS256, issuer, audience, expiry)
-  API->>DB: load user → isActive? role? sessionVersion = token.sv?
-  API-->>B: 200 data · or 401 if invalid / revoked
-  B->>API: POST /api/auth/logout
-  API->>DB: sessionVersion + 1 → every older token is dead
-```
-
-- The JWT lives only in an **HttpOnly cookie** – JavaScript (and therefore an XSS script) cannot read it.
-- **CSRF:** cookie-authenticated `POST`/`PATCH` requests must send `X-Requested-With`, which other sites cannot add.
-- The **role is read from the database** on every request; a role inside a token is ignored.
-- **Logout and admin status changes revoke all existing tokens** of that user (session version).
-- API tools can use `Authorization: Bearer <token>` (send `X-Auth-Mode: bearer` on login to receive it).
-
-## 8. Transaction workflow
-
-```mermaid
-sequenceDiagram
-  participant B as Browser
-  participant API as Express API
-  participant DB as PostgreSQL
-  B->>API: POST /api/transactions/transfer + Idempotency-Key: K
-  API->>API: validate body · fingerprint = SHA-256(endpoint + body)
-  API->>DB: key K seen before? → replay stored result (or 422 if body differs)
-  rect rgb(235, 245, 255)
-  note over API,DB: ONE PostgreSQL transaction – all or nothing
-  API->>DB: INSERT idempotency key K (UNIQUE → a duplicate waits here)
-  API->>DB: SELECT … FOR UPDATE both accounts, in sorted id order
-  API->>API: owner? active? enough balance? within limits?
-  API->>DB: UPDATE both balances (BigInt)
-  API->>DB: INSERT transaction + DEBIT entry + CREDIT entry + audit row
-  API->>DB: store response on key K
-  API->>DB: COMMIT (deferred triggers re-check the ledger)
-  end
-  API-->>B: 201 {transaction, your new balance}
-```
-
-If any step fails, PostgreSQL rolls back **everything**, and the refusal is audited outside the rolled-back transaction.
-
-## 9. Idempotency
-
-**The problem:** a request can succeed on the server while the response is lost. A retry must not move the money again.
-
-**The solution:**
-1. The browser creates **one random key per operation** (UUID) and sends it as `Idempotency-Key`. The backend **requires** it.
-2. The key row is inserted **inside the same database transaction** as the money movement, under `UNIQUE(userId, key)`.
-   A committed movement therefore always has a committed key row – and only one can exist.
-3. A **SHA-256 fingerprint** of the endpoint and the request body is stored with the key.
-4. The final response is stored on the key before commit.
-
-| Retry | Result |
+| Control | Implementation |
 |---|---|
-| Same key, same request | the **original** response, `Idempotent-Replayed: true` – nothing moves again |
-| Same key, different request | `422 IDEMPOTENCY_KEY_REUSED` |
-| Same key, sent 25 times at once | PostgreSQL makes the duplicates wait; exactly **one** transaction |
-| After a lost response | **Retry safely** in the UI re-sends the same body and key → "Already processed" |
+| **Password hashing** | bcrypt, cost 12; a dummy hash for unknown emails keeps login timing equal |
+| **Password policy** | character rules, a common-password blocklist, no email name inside the password |
+| **Sessions** | JWT (HS256, issuer, audience, 1 h expiry) only in an `HttpOnly`, `Secure`, `SameSite=Strict` cookie; logout and admin actions revoke every older token (session version) |
+| **CSRF** | cookie-authenticated writes must send `X-Requested-With`, which other sites cannot add |
+| **Role-based permissions** | role read from the database on every request; ownership checks on every account and transaction |
+| **Rate limiting** | Redis-backed, shared by all instances: general per-IP limit, login and registration limits, change-password limit |
+| **Account lockout** | 10 failed logins per account within 15 minutes, from any IP (keyed by a SHA-256 of the email) |
+| **Fail closed** | if Redis is down, sign-in, registration and staff confirmations answer 503 instead of running unprotected |
+| **Restricted database role** | the API runs as `ledgerline_api` (rows only – no schema changes, cannot disable triggers) |
+| **Database-enforced integrity** | constraints and triggers listed in [section 7](#7-banking-and-ledger-design) |
+| **Audit logging** | successes **and refusals**, rejected sessions, rate-limit blocks and admins viewing personal data; secrets redacted |
+| **Tamper-evident hash chain** | each audit record stores the SHA-256 of its content and the previous record's hash; `GET /api/audit-logs/verify` names any broken link |
+| **HTTP hardening** | Helmet, strict CORS (exact origins), CSP and HSTS on Vercel, Zod validation, uniform error responses |
 
-Proven by 29 tests in `backend/tests/integration/idempotency.test.js`, including mutation tests (removing the key claim makes
-duplicates appear and the tests fail).
+All of this is tested, but LedgerLine has **not** been independently penetration-tested or security-certified — see
+[THREATS.md](THREATS.md) (16 threats with protections, proving tests and accepted risks) and [docs/SECURITY_AUDIT.md](docs/SECURITY_AUDIT.md).
 
-## 10. Concurrency protection
+## 10. Roles and demo experience
 
-- **Row-level locks:** `SELECT … FOR UPDATE` on the accounts inside the money transaction; balances are checked **on the locked row**,
-  so a second request waits and then sees the real balance.
-- **No deadlocks:** accounts are always locked in **sorted id order**; if PostgreSQL still reports a deadlock, the (rolled-back)
-  transaction is retried up to 3 times with a short random wait.
-- **Defence in depth:** a database trigger rejects any ledger entry that does not continue the account's running balance, so a lost
-  update is refused even if the application lock were missing (shown in a mutation test).
+| Role | Can | Cannot |
+|---|---|---|
+| **Customer** (account holder) | onboard, open accounts, deposit, withdraw, transfer, see own history and statements | see other customers' data, move money from accounts they don't own |
+| **Administrator** | dashboard, user and staff management, freeze / unfreeze / close accounts, read the ledger and audit log | move money; remove the last active admin; turn a customer into staff |
+| **Auditor** | read every account, transaction, ledger entry and audit record; verify the ledger and the audit chain | change anything |
 
-**The classic test** – balance ₹1,000; ₹800 and ₹700 withdrawn at the same moment – is run 20 times: always exactly one success and
-one `INSUFFICIENT_FUNDS`, never a negative balance. A separate test asks PostgreSQL how many requests are waiting for the lock at once
-(12 of 12) to prove the tests are genuinely concurrent.
+**Evaluation & Demo Personas** (sign-in page). A collapsible panel lists the public demo accounts. **Use account** only fills in the email,
+clears the password field and moves the cursor there — it never signs in and the app never contains a password; normal rate limits and
+lockout apply.
 
-## 11. Ledger integrity
+| Card label | Signs in as (existing public demo account) | Role |
+|---|---|---|
+| Indira — Primary Customer | `asha.holder@example.com` | Account holder |
+| Divya — Transfer Counterparty | `ravi.holder@example.com` | Account holder |
+| Demo Auditor | `demo.auditor@example.com` | Auditor |
+| Administrator — Private / Presenter Only | no public login | Administrator |
 
-The rules that matter most are enforced **by PostgreSQL**, not only by application code:
+"Indira" and "Divya" are **display labels on the cards only**; after signing in the app shows the accounts' real demo names
+(Asha Verma, Ravi Kumar). The administrator has no public demo login on the deployed site. Shared demo accounts can be changed by any
+visitor, so their availability is not guaranteed.
 
-| Rule | Enforced by |
-|---|---|
-| Customer balances never go below ₹0 | `CHECK` constraint |
-| Ledger entries, transactions and audit logs cannot be updated, deleted or truncated | triggers |
-| Every new entry continues its account's running balance | `ledger_entries_check_chain` trigger |
-| At commit, every transaction has exactly one matching DEBIT and CREDIT | deferred `transactions_must_balance` trigger |
-| At commit, every changed balance equals its latest ledger balance | deferred `accounts_balance_matches_ledger` trigger |
-| A request is processed at most once | `UNIQUE(userId, key)` in the same transaction |
+## 11. Testing and verification
 
-**Verify any time:** `GET /api/ledger/verify` (admin/auditor) or `npm run verify:db` (17 read-only checks, e.g. all balances sum to ₹0,
-every balance equals credits − debits). Tests use a separate, independent SQL checker (`backend/tests/invariants.js`).
+**Automated test suites** (run locally; the Black & Gold frontend was re-verified locally on 2026-11-13: browser 35/35, frontend units 16/16, build and lint clean):
 
-## 12. API endpoints
+| Command (folder) | Covers | Result |
+|---|---|---|
+| `npm test` (backend) | Jest + Supertest on a separate test database: auth, authorization, accounts, transactions, **financial integrity**, **idempotency**, **concurrency**, ledger tampering, rate limits in Redis (incl. Redis down), readiness, bootstrap, database roles, onboarding, admin / user / staff management, audit hash chain and security events | **436 tests** |
+| `npm run test:e2e` (frontend) | Playwright in Chrome: registration, login, roles, money forms, history, lost-response retry, onboarding, admin dashboard, staff lifecycle, audit verification, password rules, mobile layout | **35 tests** |
+| `npm test` (frontend) | amount parsing (no floating point), validation, error messages, idempotency keys | **16 tests** |
+| `npm run smoke` (backend) | end-to-end API check against a running dev server | **61 checks** |
+| `npm run verify:db` (backend) | read-only checks of a real database (money conserved, ledger consistent, triggers installed, limited role, audit chain intact) | **17 checks** |
 
-Full reference with request bodies, real responses and error codes: **[docs/API.md](docs/API.md)**.
+The backend figures are from the last full backend run recorded in the project documentation (Step 6, before deployment); the backend
+was not changed afterwards. Several safeguards were also **mutation-tested** — removed on purpose to confirm the tests fail.
 
-| Method | Endpoint | Auth | Role |
-|---|---|---|---|
-| GET | `/api/health` · `/api/health/live` · `/api/health/ready` | – | – |
-| POST | `/api/auth/register` · `/api/auth/login` | – | – |
-| GET | `/api/auth/me` | ✅ | any |
-| GET · POST | `/api/onboarding` | ✅ | ACCOUNT_HOLDER (own status / submit profile + terms) |
-| POST | `/api/auth/logout` | optional | any |
-| POST | `/api/accounts` | ✅ | ACCOUNT_HOLDER, onboarding complete |
-| GET | `/api/accounts` | ✅ | any (holders see their own) |
-| GET | `/api/accounts/:id` · `/:id/balance` · `/:id/statement` | ✅ | owner, ADMIN, AUDITOR |
-| PATCH | `/api/accounts/:id/status` | ✅ | ADMIN |
-| POST | `/api/transactions/deposit` · `/withdraw` · `/transfer` | ✅ + `Idempotency-Key` | ACCOUNT_HOLDER (own accounts, onboarding complete) |
-| GET | `/api/transactions` | ✅ | any (holders see their own) |
-| GET | `/api/transactions/:id` | ✅ | involved holder, ADMIN, AUDITOR |
-| GET | `/api/ledger/entries` · `/api/ledger/verify` | ✅ | ADMIN, AUDITOR |
-| GET | `/api/audit-logs` · `/api/audit-logs/verify` | ✅ | ADMIN, AUDITOR |
-| GET | `/api/admin/overview` · `/api/admin/users` · `/api/admin/users/:id` | ✅ | ADMIN |
-| PATCH · POST | `/api/admin/users/:id/status` · `/api/admin/users/:id/revoke-sessions` | ✅ | ADMIN |
-| GET · POST · PATCH | `/api/admin/staff` · `/api/admin/staff/:id/role` | ✅ + own password for changes | ADMIN |
+**Production verification (historical, 2026-11-13, before the Black & Gold redesign)** — recorded in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md):
+- `verify-db` against production as the limited role: **17/17**; readiness: database, Redis, schema and role all `ok`.
+- `verify-deployment` through the live site: **29/29** (security headers, roles, secure cookie, onboarding, money movement, idempotency,
+  the ₹800 + ₹700 race, ledger and audit-chain verification).
+- Audit hash chain intact through record #170; existing customer balances unchanged by the migrations.
 
-## 13. Installation
+The redesigned frontend has been tested locally only; the production checks above have not been repeated since the redesign.
 
-**Prerequisites:** Node.js ≥ 20 (developed on 26), PostgreSQL 17 (`brew install postgresql@17` on macOS), Docker (for a local Redis),
-Google Chrome (for browser tests).
+## 12. Local setup
+
+**Prerequisites:** Node.js ≥ 20, PostgreSQL 17, Docker (for a local Redis), Google Chrome (browser tests).
 
 ```bash
-# 1. Database (macOS / Homebrew)
+# 1. Database (macOS / Homebrew) – the table OWNER, used for migrations only
 brew services start postgresql@17
-# the table OWNER (migrations only). CREATEROLE lets "npm run db:roles" create the limited API role.
 psql -d postgres -c "CREATE ROLE ledgerline_app WITH LOGIN PASSWORD 'choose-a-password' CREATEDB CREATEROLE;"
 createdb -O ledgerline_app ledgerline
 
-# Redis for rate-limit counters – listens on this computer only, keeps nothing on disk
+# Redis for rate-limit counters – local only, nothing kept on disk
 docker run -d --name ledgerline-redis --restart unless-stopped -p 127.0.0.1:6379:6379 redis:7.4.2-alpine redis-server --save "" --appendonly no
 
 # 2. Backend
 cd backend
-cp .env.example .env            # set DATABASE_URL (API role), DIRECT_DATABASE_URL (owner), JWT_SECRET, REDIS_URL
+cp .env.example .env            # fill in the variables listed in section 13 (never commit .env)
 npm install                     # also runs `prisma generate`
-npm run db:deploy               # apply all migrations (as the owner)
-npm run db:roles                # create ledgerline_api with exactly its privileges
-npm run db:seed                 # SYSTEM account (+ optional dev admin/auditor from SEED_*)
-npm run admin:bootstrap -- --email you@example.org --name "Your Name"   # first admin
+npm run db:deploy               # apply migrations to your LOCAL database (owner connection)
+npm run db:roles                # create the limited ledgerline_api role
+npm run db:seed                 # SYSTEM account
 npm run db:seed:demo            # optional: demo users and transactions
 npm run dev                     # http://localhost:4000
 
@@ -326,166 +359,122 @@ npm install
 npm run dev                     # http://localhost:5173
 ```
 
-Open **http://localhost:5173** (use `localhost`, not `127.0.0.1` – CORS allows the exact origin only).
-Check the database at any time: `cd backend && npm run verify:db`. Check readiness: `curl http://localhost:4000/api/health/ready`.
-After a reboot, start Redis again with `docker start ledgerline-redis` (Docker Desktop must be running).
+Open **http://localhost:5173** (use `localhost` – CORS allows the exact origin only). Production builds: `cd frontend && npm run build`.
 
-## 14. Environment variables
-
-Real values live in `backend/.env` and `frontend/.env`, which are **ignored by Git**. Templates: `backend/.env.example`,
-`backend/.env.test.example`, `frontend/.env.example`. The server validates every variable at startup and refuses to start with
-invalid values.
-
-**Backend**
-
-| Variable | Required | Default | Description |
-|---|---|---|---|
-| `DATABASE_URL` | ✅ | – | The limited API role `ledgerline_api` (rows only) |
-| `DIRECT_DATABASE_URL` | for migrations | – | The table owner – used only by migrations and `npm run db:roles`, never by the server |
-| `JWT_SECRET` | ✅ | – | ≥ 32 random characters: `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"` |
-| `NODE_ENV` | | `production` | `development` shows debug details in 500 errors; production hides them and marks cookies `Secure` |
-| `PORT` | | `4000` | API port |
-| `CORS_ORIGIN` | | `http://localhost:5173` | Comma-separated exact frontend origins (`*` is refused) |
-| `JWT_EXPIRES_IN` | | `1h` | Session/token lifetime |
-| `BCRYPT_SALT_ROUNDS` | | `12` | bcrypt cost (10–15) |
-| `RATE_LIMIT_MAX` | | `600` | Requests per IP per 15 minutes |
-| `AUTH_LOGIN_FAILURE_LIMIT` | | `10` | Failed logins per IP per 15 minutes |
-| `AUTH_REGISTER_LIMIT` | | `10` | Registrations per IP per hour |
-| `AUTH_ACCOUNT_FAILURE_LIMIT` | | `10` | Failed logins (and wrong current passwords) per account per 15 minutes, from any IP |
-| `REDIS_URL` | ✅ in production | – | Rate-limit counters, e.g. `redis://127.0.0.1:6379/0`. Production refuses to start without it; development falls back to memory |
-| `REDIS_KEY_PREFIX` | | `ll:<NODE_ENV>:` | Prefix for every Redis key, so environments never share counters |
-| `TRUST_PROXY` | | `0` | Number of proxies in front of the API (Render = 1; Vercel rewrite + Render = 2) |
-| `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` | for seeding | – | Admin created by `npm run db:seed` |
-| `SEED_AUDITOR_EMAIL` / `SEED_AUDITOR_PASSWORD` | for seeding | – | Auditor created by `npm run db:seed` |
-
-**Frontend**
-
-| Variable | Required | Description |
-|---|---|---|
-| `VITE_API_BASE_URL` | ✅ | API base URL, e.g. `http://localhost:4000/api`. Public – bundled into the JavaScript, never put secrets here. |
-
-**Tests** use `backend/.env.test` (copy `backend/.env.test.example`), which must point to a separate database named `ledgerline_test`
-and to the local Redis, database 1 (`redis://127.0.0.1:6379/1`).
-
-## 15. Testing
-
-| Command (folder) | What it covers | Result |
-|---|---|---|
-| `npm test` (backend) | Jest + Supertest: auth, authorization, accounts, transactions, **financial integrity**, **idempotency**, **concurrency**, ledger tampering, security audit, rate limits **in Redis** (incl. Redis down), readiness, **first-admin bootstrap**, change password, database roles, **onboarding**, demo seed (no duplicates), **admin / user / staff management**, **audit hash chain and security events** | 436 tests |
-| `npm test` (frontend) | amount parsing (no floating point), validation (incl. onboarding and staff), error messages, idempotency keys | 16 tests |
-| `npm run test:e2e` (frontend) | Playwright in Chrome: registration, login, protected routes, roles, money forms, history, error handling, lost-response retry, change password, onboarding, admin dashboard, user details, staff lifecycle, audit trail verification, password rules | 35 tests |
-| `npm run smoke` (backend) | end-to-end API check against your running dev server | 61 checks |
-| `npm run verify:db` (backend) | read-only check of the real database (incl. "connected as a limited role", "every account owner onboarded", "no staff owns a customer account", "audit trail hash chain intact") | 17 checks |
-
-One-time setup for the test database:
+**Tests** need a separate database named `ledgerline_test` and `backend/.env.test` (copy `backend/.env.test.example`):
 
 ```bash
 createdb -O ledgerline_app ledgerline_test
-cd backend && cp .env.test.example .env.test   # fill in password + test-only secrets
-npm test                                       # prepares ledgerline_test automatically
+cd backend && npm test          # prepares ledgerline_test automatically
+cd ../frontend && npm test && npm run test:e2e
 ```
 
-The test tools refuse to run against any database that is not named `ledgerline_test`, and against any Redis but a local one
-(database 1 or higher, test keys only – each test file gets its own key prefix, and old test keys are removed before each run). Browser tests start their own servers
-(:4001 / :5174) and use your installed Chrome.
+The test tools refuse any database not named `ledgerline_test` and any Redis that is not local. The production database is never
+touched by local setup — production migrations follow [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
-## 16. Deployment
+## 13. Environment variables
 
-**Vercel** (frontend) · **Render** (backend) · **Neon** (managed PostgreSQL). Step-by-step guide: **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**.
+Real values live in `backend/.env` and `frontend/.env`, which Git ignores; templates are `backend/.env.example`,
+`backend/.env.test.example` and `frontend/.env.example`. The server validates every variable at startup.
 
-**Live demo:** <https://ledger-line-umber.vercel.app>. Steps 5 and 6 (admin dashboard, user and staff management, audit integrity
-and security) are deployed (commit `c5833a0`) and were verified on 2026-11-13: 29/29 live checks, 17/17 database checks, the audit hash
-chain intact through record #170, and readiness all `ok`. Earlier steps were verified on 2026-11-12 (see docs/DEPLOYMENT.md).
+| Variable | Required | Purpose |
+|---|---|---|
+| `DATABASE_URL` | ✅ | connection as the limited API role `ledgerline_api` |
+| `DIRECT_DATABASE_URL` | migrations | connection as the table owner – migrations and `db:roles` only, never used by the server |
+| `JWT_SECRET` | ✅ | ≥ 32 random characters |
+| `REDIS_URL` | ✅ in production | rate-limit counters (development falls back to memory) |
+| `CORS_ORIGIN` | | exact frontend origin(s), default `http://localhost:5173` |
+| `NODE_ENV`, `PORT`, `JWT_EXPIRES_IN`, `BCRYPT_SALT_ROUNDS` | | runtime settings (defaults `production`, `4000`, `1h`, `12`) |
+| `RATE_LIMIT_MAX`, `AUTH_LOGIN_FAILURE_LIMIT`, `AUTH_REGISTER_LIMIT`, `AUTH_ACCOUNT_FAILURE_LIMIT` | | rate-limit settings (defaults 600 / 10 / 10 / 10) |
+| `REDIS_KEY_PREFIX`, `TRUST_PROXY` | | Redis key namespace; number of proxies in front of the API |
+| `SEED_ADMIN_*`, `SEED_AUDITOR_*` | seeding | optional development staff created by `npm run db:seed` |
+| `VITE_API_BASE_URL` (frontend) | ✅ | API base URL – public, bundled into the JavaScript |
 
-- `render.yaml` – Render Blueprint (build `npm ci --include=dev`, start `npm start` – migrations run from your computer, health check
-  `/api/health/ready`, `REDIS_URL` from a Render Key Value instance).
-- `frontend/vercel.json` – rewrites `/api/*` to the backend so the browser only talks to one site and the `SameSite=Strict` session cookie
-  keeps working (`*.vercel.app` and `*.onrender.com` are different sites), SPA fallback, and security headers (CSP, HSTS, …).
-- `npm run db:prepare:production` – migrations, API role privileges, SYSTEM account and verification on the production database;
-  demo data only with `-- --with-demo`
-  (reads only `backend/.env.production`; never copies your private admin).
-- `npm run verify:deployment -- <url>` – 29 end-to-end checks against the live site, including the audit trail's hash chain, including onboarding, admin pages refused to holders, idempotency, the ₹800 + ₹700 race and that the public demo admin is disabled.
+## 14. Deployment
 
-The whole setup was rehearsed locally first: production build with the same headers and `/api` forwarding, backend started exactly
-like Render (clean install, `NODE_ENV=production`, no `.env`, empty database) – all 24 deployment checks of that version passed (2026-11-08).
+| Part | Platform | Notes |
+|---|---|---|
+| Frontend | **Vercel** | `frontend/vercel.json`: `/api/*` rewrite to Render (one site for the browser, so the `SameSite=Strict` cookie works), SPA fallback, CSP / HSTS headers |
+| Backend | **Render** | `render.yaml` Blueprint; health check `/api/health/ready` – a new version goes live only when database, Redis, schema protections and the limited role are all `ok` |
+| Database | **Neon** PostgreSQL 18 | API connects as `ledgerline_api`; migrations run from the developer machine with `npm run db:prepare:production` |
+| Rate limits | **Render Key Value** (Redis) | production refuses to start without `REDIS_URL` |
+
+The step 4 and step 5–6 migrations were rehearsed on a copy of the development database, preceded by Neon backup branches
+(`pre-step4`, `pre-step56`), and followed by `verify-db` and the live checks. Full procedure, verification records and rollback strategy: **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**.
+
+## 15. API endpoints
+
+Full reference with request bodies, responses and error codes: **[docs/API.md](docs/API.md)**.
+
+| Method | Endpoint | Role |
+|---|---|---|
+| GET | `/api/health` · `/api/health/live` · `/api/health/ready` | public |
+| POST | `/api/auth/register` · `/api/auth/login` · `/api/auth/logout` · `/api/auth/change-password` | public / signed in |
+| GET | `/api/auth/me` | signed in |
+| GET · POST | `/api/onboarding` | account holder |
+| GET · POST | `/api/accounts` | signed in (holders see their own) · account holder, onboarded |
+| GET | `/api/accounts/:id` · `/:id/balance` · `/:id/statement` | owner, admin, auditor |
+| PATCH | `/api/accounts/:id/status` | admin |
+| POST | `/api/transactions/deposit` · `/withdraw` · `/transfer` (+ `Idempotency-Key`) | account holder, onboarded |
+| GET | `/api/transactions` · `/api/transactions/:id` | signed in (holders see their own) |
+| GET | `/api/ledger/entries` · `/api/ledger/verify` | admin, auditor |
+| GET | `/api/audit-logs` · `/api/audit-logs/verify` | admin, auditor |
+| GET · PATCH · POST | `/api/admin/overview` · `/api/admin/users` · `/:id` · `/:id/status` · `/:id/revoke-sessions` | admin |
+| GET · POST · PATCH | `/api/admin/staff` · `/api/admin/staff/:id/role` (own password for changes) | admin |
+
+## 16. Known limitations
+
+- **Simulated money only**; INR only; per-transaction limits but no daily limits.
+- **No real identity verification (KYC):** any valid, made-up onboarding profile is approved automatically.
+- **No MFA** and no two-person approval for administrators; temporary staff passwords are handed over outside the system.
+- **Public demo accounts are shared:** anyone can use them, change their password or trigger their lockout.
+- The per-account lockout can be triggered by anyone who knows an email address; no CAPTCHA. If Redis is down, nobody can sign in (fail closed).
+- A stolen session token works for up to 1 hour unless the user logs out.
+- Whoever holds the database **owner** password can still disable the triggers (the API itself cannot).
+- The audit chain has no external anchor: a consistent rewrite of the newest records is detectable only against a chain head noted elsewhere.
+- Idempotency keys expire after 24 hours and are not cleaned up by a scheduled job.
+- Deposits and withdrawals serialize on the single SYSTEM account row (throughput, not safety).
+- **No independent penetration test**; free hosting sleeps when idle (slow first request).
+
+Details and the full list of accepted risks: [THREATS.md](THREATS.md).
 
 ## 17. Demo credentials
 
-Safe **dummy** accounts created by `npm run db:seed:demo` (reserved `example.com` addresses, simulated money):
+Safe **dummy** accounts created by `npm run db:seed:demo` (reserved `example.com` addresses, simulated money). The password is a
+deliberately public demo value, also visible in [`backend/prisma/seed-demo.js`](backend/prisma/seed-demo.js); the sign-in page links here
+instead of embedding it.
 
 | Role | Email | Password |
 |---|---|---|
-| Account holder | `asha.holder@example.com` | `DemoPass123` |
-| Account holder | `ravi.holder@example.com` | `DemoPass123` |
-| Administrator (**local only**) | `demo.admin@example.com` | `DemoPass123` |
+| Account holder (card "Indira") | `asha.holder@example.com` | `DemoPass123` |
+| Account holder (card "Divya") | `ravi.holder@example.com` | `DemoPass123` |
 | Auditor | `demo.auditor@example.com` | `DemoPass123` |
+| Administrator | `demo.admin@example.com` – **local development only** | `DemoPass123` |
 
-The demo seed creates 3 accounts and 6 transactions plus one refused withdrawal, all through the real transaction service, with
-fixed idempotency keys. Running it again adds nothing: demo transactions are created only if the demo holders have none yet (the keys
-alone were not enough – they expire after 24 hours, which duplicated the demo transactions once on production). **Never use these
-credentials for real data.**
-The demo holders are already onboarded (with an obviously fake profile). A new registration goes through onboarding first –
-use made-up details such as date of birth `1990-01-01`, mobile `9000000000`, PIN code `560001`.
+The public demo admin is never created on the deployed site (`db:prepare:production` sets `SEED_DEMO_ADMIN=false`); the real first
+administrator is created once with `npm run admin:bootstrap` (password typed at a hidden prompt, never printed or stored). Further admins
+and auditors are created in the app under **Staff → Add staff member**. **Never use the demo accounts for real data.**
 
-**The demo admin exists only locally.** Its password is public, so it is never created on the deployed site
-(`db:prepare:production` sets `SEED_DEMO_ADMIN=false`), and an existing one is deactivated by the bootstrap below.
+## 18. Project highlights
 
-### First administrator (bootstrap)
+- **Financial integrity enforced by the database** — balances, double entries, running balances and append-only history are checked by
+  PostgreSQL constraints and triggers, not only by application code.
+- **Idempotent, concurrency-safe money movement** — one transaction per movement, keys claimed inside it, row locks in a fixed order.
+- **Least-privilege production database access** — the API runs as a role that cannot change the schema or disable protections.
+- **Tamper-evident audit history** — SHA-256 hash chain with a gapless sequence, verifiable from the auditor dashboard.
+- **Three role-specific interfaces** — customer, administrator and read-only auditor, with server-side authorization everywhere.
+- **Verified, not assumed** — 436 backend, 35 browser and 16 frontend unit tests, mutation tests of key safeguards, migration rehearsals,
+  and recorded production checks (17/17 database, 29/29 live).
 
-Public registration only creates account holders. The first admin is created once with:
-
-```bash
-cd backend
-npm run admin:bootstrap -- --email you@example.org --name "Your Name"
-# deployed database (backend/.env.production), also deactivating the public demo admin:
-npm run admin:bootstrap -- --production --email you@example.org --name "Your Name" --replace-demo-admin
-```
-
-The password is typed twice at a hidden prompt and never printed or stored. The command refuses if an active admin already exists or
-the email belongs to an existing user, uses a database lock so two runs can't both succeed, and writes an `ADMIN_BOOTSTRAP` audit
-entry. Every user can change their password on the **Profile** page (other sessions are signed out).
-
-After that, further administrators and auditors are created **in the app**: **Staff → Add staff member** (your own password confirms
-it). The new person receives a temporary password that is shown once – hand it over through a secure channel – and must choose their
-own password at the first sign-in before anything else works.
-
-## 18. Screenshots
-
-| | |
-|---|---|
-| ![Sign in](docs/screenshots/01-sign-in.png) Sign in | ![Holder dashboard](docs/screenshots/02-holder-dashboard.png) Account holder dashboard |
-| ![Transfer confirmation](docs/screenshots/03-transfer-confirm.png) Transfer – confirmation step | ![Receipt](docs/screenshots/04-transfer-receipt.png) Receipt with new balance |
-| ![Transaction details](docs/screenshots/05-transaction-details.png) Details – the other side stays private | ![Statement](docs/screenshots/06-account-statement.png) Statement with ledger proof |
-| ![Admin dashboard](docs/screenshots/07-admin-dashboard.png) Administrator overview | ![Auditor dashboard](docs/screenshots/08-auditor-dashboard.png) Auditor – read-only |
-| ![Ledger](docs/screenshots/09-ledger.png) Ledger and integrity check | ![Retry safely](docs/screenshots/10-retry-safely.png) Lost response → Retry safely |
-| ![Already processed](docs/screenshots/11-already-processed.png) Retry returns the original – no double payment | ![Mobile](docs/screenshots/12-mobile-dashboard.png) Mobile layout |
-
-## 19. Limitations and future enhancements
-
-**Known limitations** (details in [THREATS.md](THREATS.md)):
-- Onboarding has no real identity check (KYC): any valid, made-up profile is approved automatically – never enter real personal data.
-- Admins are powerful: no MFA or two-person approval; temporary staff passwords are handed over outside the system.
-- The audit chain has no external anchor: note its head (`/api/audit-logs/verify`) somewhere else now and then.
-- Whoever holds the database owner password can still disable the ledger triggers (the API itself runs as the limited `ledgerline_api`).
-- The per-account lockout can be triggered by anyone who knows an email address (10 wrong passwords lock it for up to 15 minutes);
-  no CAPTCHA or MFA. If Redis is down, nobody can sign in until it is back (by design – fail closed).
-- A stolen session token works for up to 1 hour unless the user logs out; logout signs out all devices.
-- Idempotency keys expire after 24 hours and are not cleaned up by a scheduled job.
-- All deposits and withdrawals serialize on the single SYSTEM account row (throughput, not safety).
-- INR only; per-transaction limits, no daily limits; no independent penetration test.
-
-**Future enhancements:** MFA and per-device
-sessions · scheduled cleanup of expired idempotency keys · daily limits and scheduled transfers · CSV/PDF statements ·
-multi-currency with exchange rates · CI pipeline running all test suites on every push.
-
-## 20. Project documents
+## 19. Project documentation
 
 | Document | Contents |
 |---|---|
-| [docs/PROJECT_SUMMARY.md](docs/PROJECT_SUMMARY.md) | Short project write-up: problem, what was built, AI use, AI mistakes, what is not finished |
-| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Step-by-step deployment to Vercel, Render and Neon |
-| [docs/API.md](docs/API.md) | API reference: every endpoint, request, real response, error codes |
-| [THREATS.md](THREATS.md) | Threat model: 16 financial threats, protections, proving tests, accepted risks |
-| [docs/SECURITY_AUDIT.md](docs/SECURITY_AUDIT.md) | Day 3 security audit with the actual result of each attack |
-| [PROMPTS.md](PROMPTS.md) | AI usage log: prompts, what AI generated, what was wrong, how it was found and fixed |
+| [docs/PROJECT_SUMMARY.md](docs/PROJECT_SUMMARY.md) | Short project write-up: problem, what was built, AI use and mistakes, what is not finished |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Deployment to Vercel, Render and Neon; production verification records; rollback strategy |
+| [docs/API.md](docs/API.md) | API reference: every endpoint, request, response and error code |
+| [THREATS.md](THREATS.md) | Threat model: 16 threats, protections, proving tests, accepted risks |
+| [docs/SECURITY_AUDIT.md](docs/SECURITY_AUDIT.md) | Day 3 security audit with the result of each attack |
+| [PROMPTS.md](PROMPTS.md) | AI usage log: prompts, what AI generated, what was wrong and how it was fixed |
+| [docs/RESUME_PROJECT.md](docs/RESUME_PROJECT.md) | Resume and portfolio descriptions of the project |
 | [frontend/README.md](frontend/README.md) | Frontend structure and scripts |
