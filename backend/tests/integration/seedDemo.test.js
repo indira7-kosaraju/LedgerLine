@@ -10,17 +10,25 @@ const { productionSteps } = require('../../scripts/prepare-production-db');
 afterAll(disconnectAll);
 
 // Unique demo users per test, so the test database's other data never matters.
-const demoUsers = () => {
+// classic = the original Asha/Ravi demo; personas = Indira/Divya (sign-in page "Evaluation & Demo Personas").
+const demoUsers = ({ personas = true } = {}) => {
   const id = crypto.randomUUID().slice(0, 8);
   return [
     { key: 'asha', email: `asha-${id}@example.com`, fullName: 'Asha Test', role: 'ACCOUNT_HOLDER' },
     { key: 'ravi', email: `ravi-${id}@example.com`, fullName: 'Ravi Test', role: 'ACCOUNT_HOLDER' },
+    ...(personas
+      ? [
+          { key: 'indira', email: `indira-${id}@example.com`, fullName: 'Indira Test', role: 'ACCOUNT_HOLDER' },
+          { key: 'divya', email: `divya-${id}@example.com`, fullName: 'Divya Test', role: 'ACCOUNT_HOLDER' },
+        ]
+      : []),
   ];
 };
 const quiet = () => {};
+const GROUP_KEYS = { classic: ['asha', 'ravi'], personas: ['indira', 'divya'] };
 
-async function stateOf(users) {
-  const ids = [users.asha.id, users.ravi.id];
+async function stateOf(users, group) {
+  const ids = GROUP_KEYS[group].map((key) => users[key].id);
   const accounts = await prisma.account.findMany({ where: { ownerId: { in: ids } }, orderBy: { accountNumber: 'asc' } });
   return {
     transactions: await prisma.transaction.count({ where: { initiatedById: { in: ids } } }),
@@ -28,13 +36,32 @@ async function stateOf(users) {
     balances: accounts.map((a) => a.balance.toString()),
   };
 }
+const balanceOf = async (user, index) =>
+  (await prisma.account.findMany({ where: { ownerId: user.id }, orderBy: { createdAt: 'asc' } }))[index].balance.toString();
 
-test('first run: 6 demo transactions, and the deliberately refused withdrawal is refused', async () => {
+test('first run: classic demo has 6 transactions + 1 refused withdrawal; Indira/Divya get 7 transactions', async () => {
   const run = await seedDemo({ demoUsers: demoUsers(), log: quiet });
-  expect(run.transactions).toBe('created');
-  expect(run.results.filter((r) => r === 'created')).toHaveLength(6);
-  expect(run.results[6]).toBe('refused (INSUFFICIENT_FUNDS)');
-  expect((await stateOf(run.users)).transactions).toBe(6);
+  expect(run.groups.classic.transactions).toBe('created');
+  expect(run.groups.classic.results.filter((r) => r === 'created')).toHaveLength(6);
+  expect(run.groups.classic.results[6]).toBe('refused (INSUFFICIENT_FUNDS)');
+  expect((await stateOf(run.users, 'classic')).transactions).toBe(6);
+
+  expect(run.groups.personas.transactions).toBe('created');
+  expect(run.groups.personas.results).toEqual(Array(7).fill('created'));
+  expect((await stateOf(run.users, 'personas')).transactions).toBe(7);
+  // Indira: 6,000 + 1,500 − 500 − 750 − 2,000 + 300 = ₹4,550 (main) and ₹2,000 (savings); Divya: 2,500 + 750 − 300 = ₹2,950.
+  expect(await balanceOf(run.users.indira, 0)).toBe('455000');
+  expect(await balanceOf(run.users.indira, 1)).toBe('200000');
+  expect(await balanceOf(run.users.divya, 0)).toBe('295000');
+});
+
+test('Indira and Divya are onboarded account holders, like the other demo holders', async () => {
+  const run = await seedDemo({ demoUsers: demoUsers(), log: quiet });
+  for (const key of ['indira', 'divya']) {
+    const user = await prisma.user.findUnique({ where: { id: run.users[key].id }, include: { profile: true } });
+    expect(user).toMatchObject({ role: 'ACCOUNT_HOLDER', onboardingStatus: 'APPROVED', isActive: true });
+    expect(user.profile).not.toBeNull();
+  }
 });
 
 test.each([
@@ -45,27 +72,45 @@ test.each([
   ['after the idempotency keys were DELETED', async (ids) => {
     await prisma.idempotencyKey.deleteMany({ where: { userId: { in: ids } } });
   }],
-])('re-run %s → nothing new: no transaction, no audit record, balances unchanged', async (_, prepare) => {
+])('re-run %s → nothing new in either group: no transaction, no audit record, balances unchanged', async (_, prepare) => {
   const users = demoUsers();
   const first = await seedDemo({ demoUsers: users, log: quiet });
-  const before = await stateOf(first.users);
-  await prepare([first.users.asha.id, first.users.ravi.id]);
+  const before = { classic: await stateOf(first.users, 'classic'), personas: await stateOf(first.users, 'personas') };
+  await prepare(Object.values(first.users).map((u) => u.id));
 
   const again = await seedDemo({ demoUsers: users, log: quiet });
-  expect(again).toMatchObject({ transactions: 'skipped', existing: 6 });
-  expect(await stateOf(again.users)).toEqual(before);
+  expect(again.groups.classic).toMatchObject({ transactions: 'skipped', existing: 6 });
+  expect(again.groups.personas).toMatchObject({ transactions: 'skipped', existing: 7 });
+  expect({ classic: await stateOf(again.users, 'classic'), personas: await stateOf(again.users, 'personas') }).toEqual(before);
 });
 
-test('a demo holder who already used the app (public demo login, no seed ever ran) is not seeded on top', async () => {
+test('adding Indira/Divya to an existing Asha/Ravi demo leaves Asha and Ravi untouched', async () => {
+  const classicOnly = demoUsers({ personas: false });
+  const first = await seedDemo({ demoUsers: classicOnly, log: quiet });
+  expect(first.groups).not.toHaveProperty('personas'); // a group runs only when all its holders are given
+  const before = await stateOf(first.users, 'classic');
+
+  const withPersonas = [...classicOnly, ...demoUsers().slice(2)];
+  const run = await seedDemo({ demoUsers: withPersonas, log: quiet });
+  expect(run.groups.classic).toMatchObject({ transactions: 'skipped', existing: 6 });
+  expect(run.groups.personas.transactions).toBe('created');
+  expect(run.users.asha.id).toBe(first.users.asha.id);
+  expect(await stateOf(run.users, 'classic')).toEqual(before);
+});
+
+test.each([
+  ['asha', 'classic'],
+  ['indira', 'personas'],
+])('a demo holder (%s) who already used the app is not seeded on top', async (key, group) => {
   const users = demoUsers();
   // The "visitor": an onboarded holder with the demo email, one account and one deposit made through the API.
   const visitor = await createUser();
-  await prisma.user.update({ where: { id: visitor.user.id }, data: { email: users[0].email } });
+  await prisma.user.update({ where: { id: visitor.user.id }, data: { email: users.find((u) => u.key === key).email } });
   const account = await createAccount(visitor);
   expect((await deposit(visitor, account.id, 1000)).status).toBe(201);
 
   const run = await seedDemo({ demoUsers: users, log: quiet });
-  expect(run).toMatchObject({ transactions: 'skipped', existing: 1 });
+  expect(run.groups[group]).toMatchObject({ transactions: 'skipped', existing: 1 });
   expect(await prisma.transaction.count({ where: { initiatedById: visitor.user.id } })).toBe(1);
 });
 
