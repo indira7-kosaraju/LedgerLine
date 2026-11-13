@@ -1,9 +1,8 @@
 // Evaluation & demo personas shown on the sign-in page.
 //
-// `name` is a DISPLAY LABEL for the card only. The account behind it is the existing public demo user
-// identified by `email` (created by backend/prisma/seed-demo.js and listed in README.md, "Demo credentials").
-// The database users are NOT renamed: after signing in, the app shows the account's real name
-// (asha.holder → "Asha Verma", ravi.holder → "Ravi Kumar").
+// Each card's `email` is an existing public demo user created by backend/prisma/seed-demo.js and listed in README.md
+// ("Demo credentials"). Indira Holder and Divya Holder are real demo users (seed group "personas"), so the name on the
+// card matches the name shown after signing in. The original Asha/Ravi demo users still exist but are not shown here.
 //
 // Deliberately NO passwords here – the visitor types the password, and normal sign-in security
 // (rate limits, account lockout) applies. The administrator has no public login: the public demo admin is
@@ -14,14 +13,14 @@ export const DEMO_PERSONAS = [
     name: 'Indira',
     badge: 'Primary Customer',
     description: 'Explore accounts, deposits, withdrawals, transfers and transaction history.',
-    email: 'asha.holder@example.com',
+    email: 'indira.holder@example.com',
   },
   {
     id: 'customer-counterparty',
     name: 'Divya',
     badge: 'Transfer Counterparty',
     description: 'Explore a second customer account and demonstrate transfers between users.',
-    email: 'ravi.holder@example.com',
+    email: 'divya.holder@example.com',
   },
   {
     id: 'auditor',
