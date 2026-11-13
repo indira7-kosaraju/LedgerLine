@@ -4,11 +4,9 @@
 // - Uses the reserved example.com domain and a dummy password – never real people or data.
 // - Money is moved through the real transaction service (locks, ledger, audit, idempotency),
 //   so the demo ledger is exactly as consistent as real usage.
-// - Safe to run many times: users/accounts are only created once, and each demo GROUP's transactions are created
-//   only if NONE of that group's holders has any transaction yet. (Idempotency keys alone are not enough: they
-//   expire after 24 hours – on production, 2026-11-12, a re-run after that executed all 7 demo operations again.)
-// - Two independent groups: the original Asha/Ravi demo, and the Indira/Divya personas shown on the sign-in page
-//   (added later). An existing Asha/Ravi demo is never touched when the Indira/Divya group is added.
+// - Safe to run many times: users/accounts are only created once, and the demo transactions are created
+//   only if NEITHER demo holder has any transaction yet. (Idempotency keys alone are not enough: they expire
+//   after 24 hours – on production, 2026-11-12, a re-run after that executed all 7 demo operations again.)
 // - On production it runs only when asked: npm run db:prepare:production -- --with-demo
 require('dotenv').config({ quiet: true });
 const crypto = require('crypto');
@@ -24,9 +22,6 @@ const DEMO_PASSWORD = 'DemoPass123'; // dummy – shown in README.md on purpose
 const DEMO_USERS = [
   { key: 'asha', email: 'asha.holder@example.com', fullName: 'Asha Verma', role: 'ACCOUNT_HOLDER', accounts: 2 },
   { key: 'ravi', email: 'ravi.holder@example.com', fullName: 'Ravi Kumar', role: 'ACCOUNT_HOLDER', accounts: 1 },
-  // The sign-in page's "Evaluation & Demo Personas" (frontend/src/config/demoPersonas.js).
-  { key: 'indira', email: 'indira.holder@example.com', fullName: 'Indira Holder', role: 'ACCOUNT_HOLDER', accounts: 2 },
-  { key: 'divya', email: 'divya.holder@example.com', fullName: 'Divya Holder', role: 'ACCOUNT_HOLDER', accounts: 1 },
   { key: 'admin', email: 'demo.admin@example.com', fullName: 'Demo Administrator', role: 'ADMIN', accounts: 0 },
   { key: 'auditor', email: 'demo.auditor@example.com', fullName: 'Demo Auditor', role: 'AUDITOR', accounts: 0 },
 ];
@@ -84,71 +79,42 @@ async function move(user, path, key, body) {
   }
 }
 
-// Each group: its holders, how many accounts each gets, and its fixed demo steps (built once the accounts exist).
-const DEMO_GROUPS = [
-  {
-    name: 'classic', // the original demo – keys and amounts unchanged
-    accounts: { asha: 2, ravi: 1 },
-    steps: ({ asha, ravi }, { asha: [ashaMain, ashaSavings], ravi: [raviMain] }) => [
-      [asha, 'deposit', 'demo-seed-0001-deposit-salary', { accountId: ashaMain.id, amountPaise: 500000n, description: 'Salary' }],
-      [asha, 'deposit', 'demo-seed-0002-deposit-bonus', { accountId: ashaMain.id, amountPaise: 200000n, description: 'Bonus' }],
-      [asha, 'withdraw', 'demo-seed-0003-withdraw-cash', { accountId: ashaMain.id, amountPaise: 100000n, description: 'Cash' }],
-      [asha, 'transfer', 'demo-seed-0004-transfer-ravi', { fromAccountId: ashaMain.id, toAccountId: raviMain.id, amountPaise: 50000n, description: 'Dinner' }],
-      [asha, 'transfer', 'demo-seed-0005-transfer-savings', { fromAccountId: ashaMain.id, toAccountId: ashaSavings.id, amountPaise: 150000n, description: 'Savings' }],
-      [ravi, 'deposit', 'demo-seed-0006-deposit-ravi', { accountId: raviMain.id, amountPaise: 120000n, description: 'Opening deposit' }],
-      // A deliberately refused attempt (₹3,000 from ₹1,700), so the auditor dashboard has something to show.
-      [ravi, 'withdraw', 'demo-seed-0008-withdraw-insufficient', { accountId: raviMain.id, amountPaise: 300000n, description: 'More than the balance' }],
-    ],
-  },
-  {
-    name: 'personas', // Indira (primary customer) and Divya (transfer counterparty) – transfers in both directions
-    accounts: { indira: 2, divya: 1 },
-    steps: ({ indira, divya }, { indira: [indiraMain, indiraSavings], divya: [divyaMain] }) => [
-      [indira, 'deposit', 'demo-seed-0101-indira-salary', { accountId: indiraMain.id, amountPaise: 600000n, description: 'Salary' }],
-      [indira, 'deposit', 'demo-seed-0102-indira-freelance', { accountId: indiraMain.id, amountPaise: 150000n, description: 'Freelance project' }],
-      [indira, 'withdraw', 'demo-seed-0103-indira-groceries', { accountId: indiraMain.id, amountPaise: 50000n, description: 'Groceries' }],
-      [indira, 'transfer', 'demo-seed-0104-indira-to-divya', { fromAccountId: indiraMain.id, toAccountId: divyaMain.id, amountPaise: 75000n, description: 'Shared rent' }],
-      [indira, 'transfer', 'demo-seed-0105-indira-savings', { fromAccountId: indiraMain.id, toAccountId: indiraSavings.id, amountPaise: 200000n, description: 'Savings' }],
-      [divya, 'deposit', 'demo-seed-0106-divya-opening', { accountId: divyaMain.id, amountPaise: 250000n, description: 'Opening deposit' }],
-      [divya, 'transfer', 'demo-seed-0107-divya-to-indira', { fromAccountId: divyaMain.id, toAccountId: indiraMain.id, amountPaise: 30000n, description: 'Movie tickets' }],
-    ],
-  },
-];
+// `demoUsers` can be replaced (tests use unique emails). Returns what happened, for the tests.
+async function seedDemo({ demoUsers = defaultUsers(), log = console.log } = {}) {
+  const users = {};
+  for (const u of demoUsers) users[u.key] = await ensureUser(u);
+  const [ashaMain, ashaSavings] = await ensureAccounts(users.asha, 2);
+  const [raviMain] = await ensureAccounts(users.ravi, 1);
 
-// Creates one group's accounts and – exactly once – its demo transactions.
-async function seedGroup(group, users, log) {
-  const holders = Object.keys(group.accounts).map((key) => users[key]);
-  const accounts = {};
-  for (const [key, count] of Object.entries(group.accounts)) accounts[key] = await ensureAccounts(users[key], count);
+  const asha = users.asha;
+  const ravi = users.ravi;
 
-  // Created exactly once – whether the fixed keys still exist, have expired or were cleaned up.
-  // Any transaction by one of the group's holders (an earlier seed, or a visitor using the public demo login) means: done.
-  const existing = await prisma.transaction.count({ where: { initiatedById: { in: holders.map((h) => h.id) } } });
+  // Created exactly once – whether the fixed keys below still exist, have expired or were cleaned up.
+  // Any transaction by a demo holder (from an earlier seed, or a visitor using the public demo login) means: done.
+  const existing = await prisma.transaction.count({ where: { initiatedById: { in: [asha.id, ravi.id] } } });
   if (existing > 0) {
-    log(`Demo transactions (${group.name}): skipped – these demo holders already have ${existing} transaction(s).`);
-    return { transactions: 'skipped', existing };
+    log(`Demo transactions: skipped – the demo holders already have ${existing} transaction(s).`);
+    return { users, transactions: 'skipped', existing };
   }
 
+  const steps = [
+    [asha, 'deposit', 'demo-seed-0001-deposit-salary', { accountId: ashaMain.id, amountPaise: 500000n, description: 'Salary' }],
+    [asha, 'deposit', 'demo-seed-0002-deposit-bonus', { accountId: ashaMain.id, amountPaise: 200000n, description: 'Bonus' }],
+    [asha, 'withdraw', 'demo-seed-0003-withdraw-cash', { accountId: ashaMain.id, amountPaise: 100000n, description: 'Cash' }],
+    [asha, 'transfer', 'demo-seed-0004-transfer-ravi', { fromAccountId: ashaMain.id, toAccountId: raviMain.id, amountPaise: 50000n, description: 'Dinner' }],
+    [asha, 'transfer', 'demo-seed-0005-transfer-savings', { fromAccountId: ashaMain.id, toAccountId: ashaSavings.id, amountPaise: 150000n, description: 'Savings' }],
+    [ravi, 'deposit', 'demo-seed-0006-deposit-ravi', { accountId: raviMain.id, amountPaise: 120000n, description: 'Opening deposit' }],
+    // A deliberately refused attempt (₹3,000 from ₹1,700), so the auditor dashboard has something to show.
+    [ravi, 'withdraw', 'demo-seed-0008-withdraw-insufficient', { accountId: raviMain.id, amountPaise: 300000n, description: 'More than the balance' }],
+  ];
+
   const results = [];
-  for (const [user, path, key, body] of group.steps(users, accounts)) {
+  for (const [user, path, key, body] of steps) {
     const outcome = await move(user, path, key, body);
     results.push(outcome);
     log(`${path.padEnd(8)} ${key.padEnd(34)} → ${outcome}`);
   }
-  return { transactions: 'created', results };
-}
-
-// `demoUsers` can be replaced (tests use unique emails). A group runs only if all of its holders are in `demoUsers`.
-// Returns what happened per group, for the tests.
-async function seedDemo({ demoUsers = defaultUsers(), log = console.log } = {}) {
-  const users = {};
-  for (const u of demoUsers) users[u.key] = await ensureUser(u);
-
-  const groups = {};
-  for (const group of DEMO_GROUPS) {
-    if (Object.keys(group.accounts).every((key) => users[key])) groups[group.name] = await seedGroup(group, users, log);
-  }
-  return { users, groups };
+  return { users, transactions: 'created', results };
 }
 
 async function main() {

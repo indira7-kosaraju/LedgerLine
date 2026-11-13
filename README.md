@@ -11,7 +11,7 @@
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17%20%2F%2018-d4a63a?style=flat-square&labelColor=101112)
 ![Prisma 6](https://img.shields.io/badge/Prisma-6-d4a63a?style=flat-square&labelColor=101112)
 ![Redis](https://img.shields.io/badge/Redis-rate%20limits-d4a63a?style=flat-square&labelColor=101112)
-![Tests](https://img.shields.io/badge/backend%20tests-439-4cd47b?style=flat-square&labelColor=101112)
+![Tests](https://img.shields.io/badge/backend%20tests-436-4cd47b?style=flat-square&labelColor=101112)
 
 </div>
 
@@ -297,25 +297,21 @@ lockout apply.
 
 | Card label | Signs in as (existing public demo account) | Role |
 |---|---|---|
-| Indira — Primary Customer | `indira.holder@example.com` (Indira Holder) | Account holder |
-| Divya — Transfer Counterparty | `divya.holder@example.com` (Divya Holder) | Account holder |
+| Asha Verma — Primary Customer | `asha.holder@example.com` | Account holder |
+| Ravi Kumar — Transfer Counterparty | `ravi.holder@example.com` | Account holder |
 | Demo Auditor | `demo.auditor@example.com` | Auditor |
 | Administrator — Private / Presenter Only | no public login | Administrator |
 
-Indira Holder and Divya Holder are real demo users created by the demo seed (with onboarding, accounts and transfers between them),
-so the name on the card is also the name shown after signing in. The administrator has no public demo login on the deployed site.
-Shared demo accounts can be changed by any visitor, so their availability is not guaranteed.
-
-> **Deployment status:** the Indira and Divya demo users exist in local development so far. Until the demo seed has also been run
-> on the deployed database, the live site's persona cards should keep pointing at the original demo accounts below.
+The card names are the demo users' real names, so they match the name shown after signing in. The administrator has no public demo
+login on the deployed site. Shared demo accounts can be changed by any visitor, so their availability is not guaranteed.
 
 ## 11. Testing and verification
 
-**Automated test suites** (all run locally on 2026-11-13: backend 439/439, browser 35/35, frontend units 16/16, build and lint clean):
+**Automated test suites** (all run locally on 2026-11-13: backend 436/436, browser 35/35, frontend units 16/16, build and lint clean):
 
 | Command (folder) | Covers | Result |
 |---|---|---|
-| `npm test` (backend) | Jest + Supertest on a separate test database: auth, authorization, accounts, transactions, **financial integrity**, **idempotency**, **concurrency**, ledger tampering, rate limits in Redis (incl. Redis down), readiness, bootstrap, database roles, onboarding, admin / user / staff management, audit hash chain and security events, demo seed (no duplicates) | **439 tests** |
+| `npm test` (backend) | Jest + Supertest on a separate test database: auth, authorization, accounts, transactions, **financial integrity**, **idempotency**, **concurrency**, ledger tampering, rate limits in Redis (incl. Redis down), readiness, bootstrap, database roles, onboarding, admin / user / staff management, audit hash chain and security events, demo seed (no duplicates) | **436 tests** |
 | `npm run test:e2e` (frontend) | Playwright in Chrome: registration, login, roles, money forms, history, lost-response retry, onboarding, admin dashboard, staff lifecycle, audit verification, password rules, mobile layout | **35 tests** |
 | `npm test` (frontend) | amount parsing (no floating point), validation, error messages, idempotency keys | **16 tests** |
 | `npm run smoke` (backend) | end-to-end API check against a running dev server | **61 checks** |
@@ -448,15 +444,12 @@ instead of embedding it.
 
 | Role | Email | Password |
 |---|---|---|
-| Account holder – Indira Holder (persona card) | `indira.holder@example.com` | `DemoPass123` |
-| Account holder – Divya Holder (persona card) | `divya.holder@example.com` | `DemoPass123` |
-| Account holder – Asha Verma (original demo) | `asha.holder@example.com` | `DemoPass123` |
-| Account holder – Ravi Kumar (original demo) | `ravi.holder@example.com` | `DemoPass123` |
+| Account holder – Asha Verma (persona card) | `asha.holder@example.com` | `DemoPass123` |
+| Account holder – Ravi Kumar (persona card) | `ravi.holder@example.com` | `DemoPass123` |
 | Auditor | `demo.auditor@example.com` | `DemoPass123` |
 | Administrator | `demo.admin@example.com` – **local development only** | `DemoPass123` |
 
-The demo seed works in two independent groups – the original Asha/Ravi demo and the Indira/Divya personas – and each group's demo
-transactions are created only once (a re-run, even after the idempotency keys expired, adds nothing).
+The demo seed creates its demo transactions only once – a re-run, even after the idempotency keys expired, adds nothing.
 The public demo admin is never created on the deployed site (`db:prepare:production` sets `SEED_DEMO_ADMIN=false`); the real first
 administrator is created once with `npm run admin:bootstrap` (password typed at a hidden prompt, never printed or stored). Further admins
 and auditors are created in the app under **Staff → Add staff member**. **Never use the demo accounts for real data.**
@@ -469,7 +462,7 @@ and auditors are created in the app under **Staff → Add staff member**. **Neve
 - **Least-privilege production database access** — the API runs as a role that cannot change the schema or disable protections.
 - **Tamper-evident audit history** — SHA-256 hash chain with a gapless sequence, verifiable from the auditor dashboard.
 - **Three role-specific interfaces** — customer, administrator and read-only auditor, with server-side authorization everywhere.
-- **Verified, not assumed** — 439 backend, 35 browser and 16 frontend unit tests, mutation tests of key safeguards, migration rehearsals,
+- **Verified, not assumed** — 436 backend, 35 browser and 16 frontend unit tests, mutation tests of key safeguards, migration rehearsals,
   and recorded production checks (17/17 database, 29/29 live).
 
 ## 19. Project documentation
