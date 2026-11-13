@@ -69,25 +69,25 @@ function SystemStatus() {
       />
       <CardBody className="space-y-3">
         {loading && !data && !error ? (
-          <p className="flex items-center gap-2 text-sm text-slate-500">
+          <p className="flex items-center gap-2 text-sm text-ink-3">
             <Spinner /> Checking…
           </p>
         ) : (
           <dl className="space-y-3 text-sm">
             <div className="flex items-center justify-between">
-              <dt className="text-slate-600">API server</dt>
+              <dt className="text-ink-2">API server</dt>
               <dd>{apiOk ? <Badge tone="success" dot>Online</Badge> : <Badge tone="danger" dot>Offline</Badge>}</dd>
             </div>
             <div className="flex items-center justify-between">
-              <dt className="text-slate-600">Database</dt>
+              <dt className="text-ink-2">Database</dt>
               <dd>
                 {dbOk ? <Badge tone="success" dot>Connected</Badge> : <Badge tone={apiOk ? 'danger' : 'neutral'} dot>{apiOk ? 'Unreachable' : 'Unknown'}</Badge>}
               </dd>
             </div>
             {data && (
               <div className="flex items-center justify-between">
-                <dt className="text-slate-600">Last checked</dt>
-                <dd className="tabular-nums text-slate-900">{new Date(data.timestamp).toLocaleTimeString()}</dd>
+                <dt className="text-ink-2">Last checked</dt>
+                <dd className="tabular-nums text-ink">{new Date(data.timestamp).toLocaleTimeString()}</dd>
               </div>
             )}
           </dl>
@@ -105,11 +105,11 @@ export default function HomePage() {
     <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 lg:py-16">
       <div className="grid gap-10 lg:grid-cols-[1.4fr_1fr] lg:items-start">
         <section>
-          <p className="text-sm font-semibold uppercase tracking-wide text-brand-600">Simulated banking</p>
-          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
+          <p className="text-sm font-semibold uppercase tracking-wide text-gold-soft">Simulated banking</p>
+          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-ink sm:text-4xl">
             Money movement with a ledger you can prove.
           </h1>
-          <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600">
+          <p className="mt-4 max-w-2xl text-base leading-7 text-ink-2">
             Open accounts, deposit simulated money, withdraw and transfer – with every rupee traceable to a
             balanced, append-only ledger.
           </p>
@@ -133,9 +133,9 @@ export default function HomePage() {
 
           <ul className="mt-8 grid gap-4 sm:grid-cols-2">
             {FEATURES.map((f) => (
-              <li key={f.title} className="rounded-xl border border-slate-200 bg-white p-4">
-                <h3 className="text-sm font-semibold text-slate-900">{f.title}</h3>
-                <p className="mt-1 text-sm leading-6 text-slate-600">{f.text}</p>
+              <li key={f.title} className="rounded-xl border border-line bg-card p-4">
+                <h3 className="text-sm font-semibold text-ink">{f.title}</h3>
+                <p className="mt-1 text-sm leading-6 text-ink-2">{f.text}</p>
               </li>
             ))}
           </ul>

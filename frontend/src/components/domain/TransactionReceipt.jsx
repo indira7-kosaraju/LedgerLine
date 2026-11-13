@@ -11,17 +11,17 @@ import { formatDateTime, humanize } from '../../utils/format'
 export default function TransactionReceipt({ result, onNew }) {
   const { transaction: t, account } = result
   return (
-    <Card className="border-emerald-200">
+    <Card className="border-success/30">
       <CardBody className="space-y-5">
         <div className="flex items-start gap-3">
-          <CheckCircleIcon className="size-7 shrink-0 text-emerald-600" />
+          <CheckCircleIcon className="size-7 shrink-0 text-success" />
           <div>
-            <h2 className="text-lg font-semibold text-slate-900">{humanize(t.type)} complete</h2>
-            <p className="text-sm text-slate-500">Recorded in the ledger · {formatDateTime(t.createdAt)}</p>
+            <h2 className="text-lg font-semibold text-ink">{humanize(t.type)} complete</h2>
+            <p className="text-sm text-ink-3">Recorded in the ledger · {formatDateTime(t.createdAt)}</p>
           </div>
         </div>
 
-        <p className="text-3xl font-semibold tabular-nums tracking-tight text-slate-900">{t.amount.formatted}</p>
+        <p className="text-3xl font-semibold tabular-nums tracking-tight text-ink">{t.amount.formatted}</p>
 
         {/* The server recognised this as a repeat of an earlier request (same Idempotency-Key). */}
         {result.replayed && (
@@ -30,25 +30,25 @@ export default function TransactionReceipt({ result, onNew }) {
           </Alert>
         )}
 
-        <dl className="grid gap-4 rounded-lg bg-slate-50 p-4 text-sm sm:grid-cols-2">
+        <dl className="grid gap-4 rounded-lg bg-surface p-4 text-sm sm:grid-cols-2">
           <div>
-            <dt className="text-slate-500">Reference</dt>
-            <dd className="mt-0.5 font-mono text-slate-900">{t.reference}</dd>
+            <dt className="text-ink-3">Reference</dt>
+            <dd className="mt-0.5 font-mono text-ink">{t.reference}</dd>
           </div>
           <div>
-            <dt className="text-slate-500">From → To</dt>
-            <dd className="mt-0.5 font-mono text-xs text-slate-900">
+            <dt className="text-ink-3">From → To</dt>
+            <dd className="mt-0.5 font-mono text-xs text-ink">
               {t.fromAccount.accountNumber} → {t.toAccount.accountNumber}
             </dd>
           </div>
           <div>
-            <dt className="text-slate-500">New balance of {account.accountNumber}</dt>
-            <dd className="mt-0.5 font-semibold tabular-nums text-slate-900">{account.balance.formatted}</dd>
+            <dt className="text-ink-3">New balance of {account.accountNumber}</dt>
+            <dd className="mt-0.5 font-semibold tabular-nums text-ink">{account.balance.formatted}</dd>
           </div>
           {t.description && (
             <div>
-              <dt className="text-slate-500">Description</dt>
-              <dd className="mt-0.5 text-slate-900">{t.description}</dd>
+              <dt className="text-ink-3">Description</dt>
+              <dd className="mt-0.5 text-ink">{t.description}</dd>
             </div>
           )}
         </dl>

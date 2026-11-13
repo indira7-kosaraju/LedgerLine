@@ -16,8 +16,8 @@ import LedgerEntriesTable from '../components/domain/LedgerEntriesTable'
 function Detail({ label, children }) {
   return (
     <div>
-      <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</dt>
-      <dd className="mt-1 text-sm text-slate-900">{children}</dd>
+      <dt className="text-xs font-medium uppercase tracking-wide text-ink-3">{label}</dt>
+      <dd className="mt-1 text-sm text-ink">{children}</dd>
     </div>
   )
 }
@@ -41,7 +41,7 @@ export default function TransactionDetailsPage() {
   const result = useApi((opts) => getTransaction(id, opts), [id])
 
   const back = (
-    <Link to="/transactions" className="text-sm font-medium text-slate-500 hover:text-slate-700">
+    <Link to="/transactions" className="text-sm font-medium text-ink-3 hover:text-ink-2">
       ← Transactions
     </Link>
   )
@@ -62,7 +62,7 @@ export default function TransactionDetailsPage() {
   // Link to an account page only where the viewer can open it.
   const accountCell = (account) =>
     seesAll || ownAccountIds.has(account.id) ? (
-      <Link to={`/accounts/${account.id}`} className="font-mono font-medium text-brand-700 hover:underline">
+      <Link to={`/accounts/${account.id}`} className="font-mono font-medium text-gold-soft hover:underline">
         {account.accountNumber}
       </Link>
     ) : (
@@ -82,11 +82,11 @@ export default function TransactionDetailsPage() {
       <div className="grid gap-6 lg:grid-cols-3">
         <Card>
           <CardBody>
-            <p className="text-sm font-medium text-slate-500">Amount</p>
+            <p className="text-sm font-medium text-ink-3">Amount</p>
             <p
               className={cn(
                 'mt-1 text-3xl font-semibold tabular-nums tracking-tight',
-                direction === 'in' ? 'text-emerald-700' : direction === 'out' ? 'text-rose-700' : 'text-slate-900',
+                direction === 'in' ? 'text-success' : direction === 'out' ? 'text-danger' : 'text-ink',
               )}
             >
               {direction === 'in' ? '+' : direction === 'out' ? '−' : ''}
@@ -110,7 +110,7 @@ export default function TransactionDetailsPage() {
               <Detail label="Initiated by">{initiatedBy}</Detail>
               <Detail label="Description">{t.description ?? '—'}</Detail>
               <Detail label="Transaction ID">
-                <span className="break-all font-mono text-xs text-slate-600">{t.id}</span>
+                <span className="break-all font-mono text-xs text-ink-2">{t.id}</span>
               </Detail>
               <Detail label="Date">{formatDateTime(t.createdAt)}</Detail>
             </dl>
@@ -125,7 +125,7 @@ export default function TransactionDetailsPage() {
         />
         <LedgerEntriesTable items={ledgerEntries} showReference={false} compact />
         {entriesHidden > 0 && (
-          <p className="border-t border-slate-100 px-4 py-3 text-xs text-slate-500">
+          <p className="border-t border-line-soft px-4 py-3 text-xs text-ink-3">
             The other side of this transaction ({entriesHidden} entry on an account that isn&apos;t yours) is not shown, for privacy.
           </p>
         )}

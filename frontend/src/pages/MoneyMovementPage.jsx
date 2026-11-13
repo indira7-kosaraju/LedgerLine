@@ -50,8 +50,8 @@ const ACCOUNT_NUMBER_PATTERN = /^LL\d{10}$/
 function SummaryRow({ label, children }) {
   return (
     <div className="flex justify-between gap-4 py-2">
-      <dt className="text-slate-500">{label}</dt>
-      <dd className="text-right font-medium text-slate-900">{children}</dd>
+      <dt className="text-ink-3">{label}</dt>
+      <dd className="text-right font-medium text-ink">{children}</dd>
     </div>
   )
 }
@@ -233,8 +233,8 @@ export default function MoneyMovementPage({ type }) {
 
               {type === 'TRANSFER' && (
                 <fieldset className="space-y-3">
-                  <legend className="text-sm font-medium text-slate-700">Send to</legend>
-                  <div className="inline-flex rounded-lg bg-slate-100 p-1" role="group" aria-label="Destination type">
+                  <legend className="text-sm font-medium text-ink-2">Send to</legend>
+                  <div className="inline-flex rounded-lg bg-elevated p-1" role="group" aria-label="Destination type">
                     {[
                       ['own', 'My other account'],
                       ['number', 'Account number'],
@@ -247,7 +247,7 @@ export default function MoneyMovementPage({ type }) {
                         onClick={() => setField('destinationMode', mode)}
                         className={cn(
                           'rounded-md px-3 py-1.5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40',
-                          destinationMode === mode ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900',
+                          destinationMode === mode ? 'bg-card text-ink shadow-sm' : 'text-ink-2 hover:text-ink',
                         )}
                       >
                         {label}
@@ -313,8 +313,8 @@ export default function MoneyMovementPage({ type }) {
           </CardBody>
         </Card>
 
-        <aside className="space-y-3 text-sm text-slate-600">
-          <h2 className="font-semibold text-slate-900">What happens next</h2>
+        <aside className="space-y-3 text-sm text-ink-2">
+          <h2 className="font-semibold text-ink">What happens next</h2>
           <ol className="list-decimal space-y-2 pl-5">
             <li>You confirm the details.</li>
             <li>The server checks your account, its status, your balance and the limits.</li>
@@ -334,8 +334,8 @@ export default function MoneyMovementPage({ type }) {
       >
         {review && (
           <>
-            <p className="text-3xl font-semibold tabular-nums tracking-tight text-slate-900">{review.amountDisplay}</p>
-            <dl className="mt-4 divide-y divide-slate-100 border-y border-slate-100 text-sm">
+            <p className="text-3xl font-semibold tabular-nums tracking-tight text-ink">{review.amountDisplay}</p>
+            <dl className="mt-4 divide-y divide-line-soft border-y border-line-soft text-sm">
               <SummaryRow label="From">
                 <span className="font-mono">{review.from}</span>
               </SummaryRow>
@@ -344,7 +344,7 @@ export default function MoneyMovementPage({ type }) {
               </SummaryRow>
               {review.description && <SummaryRow label="Description">{review.description}</SummaryRow>}
             </dl>
-            <p className="mt-3 text-xs text-slate-500">Simulated money. The server makes the final decision.</p>
+            <p className="mt-3 text-xs text-ink-3">Simulated money. The server makes the final decision.</p>
           </>
         )}
       </ConfirmDialog>

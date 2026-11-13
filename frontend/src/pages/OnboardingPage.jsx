@@ -41,7 +41,7 @@ function Steps({ step }) {
   return (
     <ol className="mb-6 flex flex-col gap-2 text-sm sm:flex-row sm:gap-6" aria-label="Onboarding steps">
       {items.map((label, i) => (
-        <li key={label} className={i + 1 === step ? 'font-semibold text-brand-700' : 'text-slate-500'} aria-current={i + 1 === step ? 'step' : undefined}>
+        <li key={label} className={i + 1 === step ? 'font-semibold text-gold-soft' : 'text-ink-3'} aria-current={i + 1 === step ? 'step' : undefined}>
           {i + 1}. {label}
         </li>
       ))}
@@ -62,8 +62,8 @@ function DetailsSummary({ details }) {
     <dl className="grid gap-3 text-sm sm:grid-cols-2">
       {rows.map(([label, value]) => (
         <div key={label}>
-          <dt className="text-slate-500">{label}</dt>
-          <dd className="font-medium text-slate-900">{value}</dd>
+          <dt className="text-ink-3">{label}</dt>
+          <dd className="font-medium text-ink">{value}</dd>
         </div>
       ))}
     </dl>
@@ -79,7 +79,7 @@ function Completed({ onboarding }) {
           {onboarding.profile ? (
             <DetailsSummary details={onboarding.profile} />
           ) : (
-            <p className="text-sm text-slate-600">Your account was set up before onboarding was introduced – there is nothing more to do.</p>
+            <p className="text-sm text-ink-2">Your account was set up before onboarding was introduced – there is nothing more to do.</p>
           )}
           <Link to="/accounts" className={`${buttonClasses()} mt-6`}>
             Go to my accounts
@@ -190,14 +190,14 @@ export default function OnboardingPage() {
           <CardHeader title="Review and accept the terms" description={`Terms version ${requirements.termsVersion}`} />
           <CardBody>
             <DetailsSummary details={details} />
-            <ul className="mt-6 list-disc space-y-1 rounded-lg bg-slate-50 py-4 pl-8 pr-4 text-sm text-slate-700">
+            <ul className="mt-6 list-disc space-y-1 rounded-lg bg-surface py-4 pl-8 pr-4 text-sm text-ink-2">
               {TERMS.map((t) => (
                 <li key={t}>{t}</li>
               ))}
             </ul>
             <form onSubmit={handleSubmit} noValidate className="mt-6 space-y-5">
               <div>
-                <label className="flex items-start gap-3 text-sm text-slate-700">
+                <label className="flex items-start gap-3 text-sm text-ink-2">
                   <input
                     type="checkbox"
                     name="acceptTerms"
@@ -207,11 +207,11 @@ export default function OnboardingPage() {
                       setErrors((er) => ({ ...er, acceptTerms: undefined }))
                     }}
                     aria-invalid={errors.acceptTerms ? true : undefined}
-                    className="mt-0.5 size-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                    className="mt-0.5 size-4 rounded border-line text-gold-soft focus:ring-gold"
                   />
                   I have read and accept the terms (version {requirements.termsVersion}).
                 </label>
-                {errors.acceptTerms && <p className="mt-1.5 text-sm text-rose-600">{errors.acceptTerms}</p>}
+                {errors.acceptTerms && <p className="mt-1.5 text-sm text-danger">{errors.acceptTerms}</p>}
               </div>
               <div className="flex gap-3">
                 <Button variant="secondary" onClick={() => setStep(1)} disabled={submitting}>

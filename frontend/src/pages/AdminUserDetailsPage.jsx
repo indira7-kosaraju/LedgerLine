@@ -20,8 +20,8 @@ import AuditLogTable from '../components/domain/AuditLogTable'
 function Row({ label, children }) {
   return (
     <div>
-      <dt className="text-slate-500">{label}</dt>
-      <dd className="font-medium text-slate-900">{children}</dd>
+      <dt className="text-ink-3">{label}</dt>
+      <dd className="font-medium text-ink">{children}</dd>
     </div>
   )
 }
@@ -72,7 +72,7 @@ export default function AdminUserDetailsPage() {
   return (
     <>
       <PageHeader
-        eyebrow={<Link to="/admin/users" className="hover:text-brand-700">← Users</Link>}
+        eyebrow={<Link to="/admin/users" className="hover:text-gold-bright">← Users</Link>}
         title={user.fullName}
         description={user.email}
         actions={
@@ -101,7 +101,7 @@ export default function AdminUserDetailsPage() {
               <Row label="Role">
                 <Badge tone={user.role === 'ACCOUNT_HOLDER' ? 'neutral' : 'brand'}>{ROLE_LABELS[user.role] ?? user.role}</Badge>
                 {user.role !== 'ACCOUNT_HOLDER' && (
-                  <Link to="/admin/staff" className="ml-2 text-xs font-medium text-brand-600 hover:text-brand-700">
+                  <Link to="/admin/staff" className="ml-2 text-xs font-medium text-gold-soft hover:text-gold-bright">
                     Change on the Staff page
                   </Link>
                 )}
@@ -119,9 +119,9 @@ export default function AdminUserDetailsPage() {
           <CardHeader title="Onboarding profile" description="Demo data – shown minimised" />
           <CardBody>
             {user.role !== 'ACCOUNT_HOLDER' ? (
-              <p className="text-sm text-slate-500">Staff members have no customer profile.</p>
+              <p className="text-sm text-ink-3">Staff members have no customer profile.</p>
             ) : !profile ? (
-              <p className="text-sm text-slate-500">
+              <p className="text-sm text-ink-3">
                 {user.onboardingStatus === 'APPROVED' ? 'Onboarded before profiles existed.' : 'Onboarding not completed yet.'}
               </p>
             ) : (
@@ -148,7 +148,7 @@ export default function AdminUserDetailsPage() {
               <Row label="Transactions started">{activity.transactions}</Row>
             </dl>
             {accounts.total > 0 && (
-              <Link to={`/accounts?q=${encodeURIComponent(user.email)}`} className="mt-4 inline-block text-sm font-medium text-brand-600 hover:text-brand-700">
+              <Link to={`/accounts?q=${encodeURIComponent(user.email)}`} className="mt-4 inline-block text-sm font-medium text-gold-soft hover:text-gold-bright">
                 View their accounts →
               </Link>
             )}
@@ -174,7 +174,7 @@ export default function AdminUserDetailsPage() {
         }}
       >
         <p>
-          <strong className="text-slate-900">{user.fullName}</strong> ({user.email}): {pending && ACTIONS[pending].text}
+          <strong className="text-ink">{user.fullName}</strong> ({user.email}): {pending && ACTIONS[pending].text}
         </p>
         <Input label="Reason (optional, stored in the audit log)" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={200} className="mt-4" />
       </ConfirmDialog>

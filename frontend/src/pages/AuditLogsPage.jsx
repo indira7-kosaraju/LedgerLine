@@ -67,7 +67,7 @@ export default function AuditLogsPage() {
         <AuditIntegrityCard result={integrity} />
       </div>
       <Card>
-        <div className="flex flex-col gap-3 border-b border-slate-100 p-4 sm:flex-row sm:flex-wrap">
+        <div className="flex flex-col gap-3 border-b border-line-soft p-4 sm:flex-row sm:flex-wrap">
           <Select label="Outcome" options={OUTCOME_OPTIONS} value={outcome} onChange={(e) => update({ outcome: e.target.value })} className="sm:w-44" />
           <Select label="Category" options={CATEGORY_OPTIONS} value={category} onChange={(e) => update({ category: e.target.value })} className="sm:w-52" />
           <Select label="Entity" options={ENTITY_OPTIONS} value={entityType} onChange={(e) => update({ entity: e.target.value })} className="sm:w-44" />

@@ -3,9 +3,9 @@ import { ToastContext } from './ToastContext'
 import { cn } from '../utils/cn'
 
 const TONES = {
-  success: 'border-emerald-200 bg-white text-emerald-800 [&>span]:bg-emerald-500',
-  error: 'border-rose-200 bg-white text-rose-800 [&>span]:bg-rose-500',
-  info: 'border-brand-200 bg-white text-brand-800 [&>span]:bg-brand-500',
+  success: 'border-success/30 bg-card text-success [&>span]:bg-success',
+  error: 'border-danger/30 bg-card text-danger [&>span]:bg-danger',
+  info: 'border-gold-deep/70 bg-card text-gold-bright [&>span]:bg-gold',
 }
 
 const DURATION_MS = 4500
@@ -46,8 +46,8 @@ export default function ToastProvider({ children }) {
             className={cn('pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-lg border px-4 py-3 text-sm shadow-lg', TONES[t.tone])}
           >
             <span className="mt-1.5 size-2 shrink-0 rounded-full" aria-hidden="true" />
-            <p className="flex-1 text-slate-800">{t.message}</p>
-            <button type="button" onClick={() => dismiss(t.id)} className="text-slate-400 hover:text-slate-600" aria-label="Dismiss notification">
+            <p className="flex-1 text-ink">{t.message}</p>
+            <button type="button" onClick={() => dismiss(t.id)} className="text-ink-3 hover:text-ink-2" aria-label="Dismiss notification">
               ✕
             </button>
           </div>

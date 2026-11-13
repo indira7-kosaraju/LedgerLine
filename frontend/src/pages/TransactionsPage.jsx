@@ -68,7 +68,7 @@ export default function TransactionsPage() {
 
       <Card>
         <form
-          className="flex flex-col gap-3 border-b border-slate-100 p-4 md:flex-row md:items-end"
+          className="flex flex-col gap-3 border-b border-line-soft p-4 md:flex-row md:items-end"
           onSubmit={(event) => {
             event.preventDefault()
             update({ q: search.trim() })

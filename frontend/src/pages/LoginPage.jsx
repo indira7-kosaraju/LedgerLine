@@ -55,7 +55,7 @@ export default function LoginPage() {
       footer={
         <>
           New to LedgerLine?{' '}
-          <Link to="/register" state={location.state} className="font-medium text-brand-600 hover:text-brand-700">
+          <Link to="/register" state={location.state} className="font-medium text-gold-soft hover:text-gold-bright">
             Create an account
           </Link>
         </>

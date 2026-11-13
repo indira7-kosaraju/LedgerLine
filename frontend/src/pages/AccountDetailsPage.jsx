@@ -42,8 +42,8 @@ const NEXT_STATUSES = { ACTIVE: ['FROZEN', 'CLOSED'], FROZEN: ['ACTIVE', 'CLOSED
 function Detail({ label, children }) {
   return (
     <div>
-      <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</dt>
-      <dd className="mt-1 text-sm text-slate-900">{children}</dd>
+      <dt className="text-xs font-medium uppercase tracking-wide text-ink-3">{label}</dt>
+      <dd className="mt-1 text-sm text-ink">{children}</dd>
     </div>
   )
 }
@@ -95,8 +95,8 @@ function StatusManager({ account, onChanged }) {
       >
         <p>{action?.text}</p>
         <p className="mt-2">
-          Account <span className="font-mono font-medium text-slate-900">{account.accountNumber}</span> · balance{' '}
-          <span className="font-medium tabular-nums text-slate-900">{account.balance.formatted}</span>
+          Account <span className="font-mono font-medium text-ink">{account.accountNumber}</span> · balance{' '}
+          <span className="font-medium tabular-nums text-ink">{account.balance.formatted}</span>
         </p>
         <Input
           label="Reason (optional, saved in the audit log)"
@@ -125,7 +125,7 @@ export default function AccountDetailsPage() {
     return (
       <div className="max-w-xl">
         <ErrorState error={account.error} onRetry={account.reload} />
-        <Link to="/accounts" className="mt-4 inline-block text-sm font-medium text-brand-600 hover:text-brand-700">
+        <Link to="/accounts" className="mt-4 inline-block text-sm font-medium text-gold-soft hover:text-gold-bright">
           ← Back to accounts
         </Link>
       </div>
@@ -145,7 +145,7 @@ export default function AccountDetailsPage() {
 
   return (
     <>
-      <Link to="/accounts" className="text-sm font-medium text-slate-500 hover:text-slate-700">
+      <Link to="/accounts" className="text-sm font-medium text-ink-3 hover:text-ink-2">
         ← Accounts
       </Link>
       <div className="mt-2">
@@ -160,13 +160,13 @@ export default function AccountDetailsPage() {
         <Card>
           <CardBody>
             <div className="flex items-start justify-between gap-2">
-              <p className="text-sm font-medium text-slate-500">Current balance</p>
+              <p className="text-sm font-medium text-ink-3">Current balance</p>
               <Button variant="ghost" size="sm" onClick={reloadAll} loading={balance.loading} aria-label="Refresh balance">
                 Refresh
               </Button>
             </div>
-            <p className="mt-1 text-3xl font-semibold tabular-nums tracking-tight text-slate-900">{current.balance.formatted}</p>
-            {current.asOf && <p className="mt-1 text-xs text-slate-500">As of {formatDateTime(current.asOf)}</p>}
+            <p className="mt-1 text-3xl font-semibold tabular-nums tracking-tight text-ink">{current.balance.formatted}</p>
+            {current.asOf && <p className="mt-1 text-xs text-ink-3">As of {formatDateTime(current.asOf)}</p>}
             <div className="mt-3">
               <AccountStatusBadge status={a.status} />
             </div>
@@ -177,27 +177,27 @@ export default function AccountDetailsPage() {
         <Card>
           <CardBody>
             <div className="flex items-center justify-between">
-              <p className="text-sm font-medium text-slate-500">Ledger proof</p>
+              <p className="text-sm font-medium text-ink-3">Ledger proof</p>
               {summary &&
                 (summary.balanceMatchesLedger ? <Badge tone="success" dot>Matches ledger</Badge> : <Badge tone="danger" dot>Mismatch</Badge>)}
             </div>
             {summary ? (
               <dl className="mt-3 space-y-1.5 text-sm">
                 <div className="flex justify-between">
-                  <dt className="text-slate-500">Total credits</dt>
-                  <dd className="tabular-nums text-emerald-700">{summary.totalCredits.formatted}</dd>
+                  <dt className="text-ink-3">Total credits</dt>
+                  <dd className="tabular-nums text-success">{summary.totalCredits.formatted}</dd>
                 </div>
                 <div className="flex justify-between">
-                  <dt className="text-slate-500">Total debits</dt>
-                  <dd className="tabular-nums text-rose-700">{summary.totalDebits.formatted}</dd>
+                  <dt className="text-ink-3">Total debits</dt>
+                  <dd className="tabular-nums text-danger">{summary.totalDebits.formatted}</dd>
                 </div>
-                <div className="flex justify-between border-t border-slate-100 pt-1.5 font-medium">
-                  <dt className="text-slate-700">Ledger balance</dt>
-                  <dd className="tabular-nums text-slate-900">{summary.ledgerBalance.formatted}</dd>
+                <div className="flex justify-between border-t border-line-soft pt-1.5 font-medium">
+                  <dt className="text-ink-2">Ledger balance</dt>
+                  <dd className="tabular-nums text-ink">{summary.ledgerBalance.formatted}</dd>
                 </div>
               </dl>
             ) : (
-              <div className="mt-3 h-16 animate-pulse rounded bg-slate-100" />
+              <div className="mt-3 h-16 animate-pulse rounded bg-elevated" />
             )}
           </CardBody>
         </Card>

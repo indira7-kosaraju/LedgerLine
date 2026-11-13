@@ -6,10 +6,10 @@ import { CheckCircleIcon } from '../icons'
 // otherwise open an account or move money. UI only – the backend refuses those actions too.
 export default function OnboardingNotice({ className }) {
   return (
-    <div className={`rounded-xl border border-brand-200 bg-brand-50 px-6 py-8 text-center ${className ?? ''}`}>
-      <CheckCircleIcon className="mx-auto size-8 text-brand-600" />
-      <p className="mt-3 font-semibold text-slate-900">Complete your onboarding first</p>
-      <p className="mt-1 text-sm text-slate-600">
+    <div className={`rounded-xl border border-gold-deep/70 bg-gold-dark/50 px-6 py-8 text-center ${className ?? ''}`}>
+      <CheckCircleIcon className="mx-auto size-8 text-gold-soft" />
+      <p className="mt-3 font-semibold text-ink">Complete your onboarding first</p>
+      <p className="mt-1 text-sm text-ink-2">
         A few profile details and accepting the terms – then you can open accounts and move simulated money.
       </p>
       <Link to="/onboarding" className={`${buttonClasses()} mt-4`}>

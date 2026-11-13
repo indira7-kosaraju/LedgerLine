@@ -8,10 +8,10 @@ export default function Pagination({ page, limit, total, onPageChange, disabled 
   const to = Math.min(page * limit, total)
 
   return (
-    <nav className="flex items-center justify-between gap-4 border-t border-slate-100 px-4 py-3 text-sm" aria-label="Pagination">
-      <p className="text-slate-500">
-        Showing <span className="font-medium text-slate-700">{from}</span>–<span className="font-medium text-slate-700">{to}</span> of{' '}
-        <span className="font-medium text-slate-700">{total}</span>
+    <nav className="flex items-center justify-between gap-4 border-t border-line-soft px-4 py-3 text-sm" aria-label="Pagination">
+      <p className="text-ink-3">
+        Showing <span className="font-medium text-ink-2">{from}</span>–<span className="font-medium text-ink-2">{to}</span> of{' '}
+        <span className="font-medium text-ink-2">{total}</span>
       </p>
       <div className="flex gap-2">
         <Button variant="secondary" size="sm" disabled={disabled || page <= 1} onClick={() => onPageChange(page - 1)}>

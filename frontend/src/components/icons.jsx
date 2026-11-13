@@ -95,3 +95,35 @@ export const PlusIcon = (p) => (
     <path d="M12 5v14M5 12h14" />
   </Icon>
 )
+export const BankIcon = (p) => (
+  <Icon {...p}>
+    <path d="M3 9.5 12 4l9 5.5M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20.5h18" />
+  </Icon>
+)
+export const LogoutIcon = (p) => (
+  <Icon {...p}>
+    <path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 16l-4-4 4-4M6 12h10" />
+  </Icon>
+)
+export const ShieldCheckIcon = (p) => (
+  <Icon {...p}>
+    <path d="M12 3 4.5 6v5.5c0 4.6 3.2 8.4 7.5 9.5 4.3-1.1 7.5-4.9 7.5-9.5V6z" />
+    <path d="m8.8 12.2 2.2 2.2 4.4-4.6" />
+  </Icon>
+)
+export const LinkIcon = (p) => (
+  <Icon {...p}>
+    <path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" />
+  </Icon>
+)
+export const FileIcon = (p) => (
+  <Icon {...p}>
+    <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+    <path d="M14 3v5h5M9 13h6M9 17h4" />
+  </Icon>
+)
+export const AlertTriangleIcon = (p) => (
+  <Icon {...p}>
+    <path d="M12 4 2.8 19.5h18.4zM12 10v4M12 17h.01" />
+  </Icon>
+)

@@ -69,16 +69,16 @@ export default function ProfilePage() {
           <CardBody>
             <dl className="space-y-3 text-sm">
               <div>
-                <dt className="text-slate-500">Full name</dt>
-                <dd className="font-medium text-slate-900">{user.fullName}</dd>
+                <dt className="text-ink-3">Full name</dt>
+                <dd className="font-medium text-ink">{user.fullName}</dd>
               </div>
               <div>
-                <dt className="text-slate-500">Email</dt>
-                <dd className="font-medium text-slate-900">{user.email}</dd>
+                <dt className="text-ink-3">Email</dt>
+                <dd className="font-medium text-ink">{user.email}</dd>
               </div>
               <div>
-                <dt className="text-slate-500">Role</dt>
-                <dd className="font-medium text-slate-900">{ROLE_LABELS[user.role] ?? user.role}</dd>
+                <dt className="text-ink-3">Role</dt>
+                <dd className="font-medium text-ink">{ROLE_LABELS[user.role] ?? user.role}</dd>
               </div>
             </dl>
           </CardBody>

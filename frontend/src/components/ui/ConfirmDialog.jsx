@@ -22,15 +22,15 @@ export default function ConfirmDialog({ open, title, children, confirmLabel = 'C
         event.preventDefault()
         if (!loading) onCancel()
       }}
-      className="m-auto w-[calc(100%-2rem)] max-w-md rounded-xl p-0 shadow-xl backdrop:bg-slate-900/40"
+      className="m-auto w-[calc(100%-2rem)] max-w-md rounded-2xl border border-gold-deep/60 bg-card p-0 text-ink shadow-2xl backdrop:bg-black/75 backdrop:backdrop-blur-sm"
     >
       <div className="px-6 pb-4 pt-6">
-        <h2 id="confirm-dialog-title" className="text-lg font-semibold text-slate-900">
+        <h2 id="confirm-dialog-title" className="text-lg font-semibold text-ink">
           {title}
         </h2>
-        <div className="mt-3 text-sm text-slate-600">{children}</div>
+        <div className="mt-3 text-sm text-ink-2">{children}</div>
       </div>
-      <div className="flex justify-end gap-2 border-t border-slate-100 bg-slate-50 px-6 py-4">
+      <div className="flex justify-end gap-2 border-t border-line-soft bg-surface/80 px-6 py-4">
         <Button variant="secondary" onClick={onCancel} disabled={loading}>
           Cancel
         </Button>

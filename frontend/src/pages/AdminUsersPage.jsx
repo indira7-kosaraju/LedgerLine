@@ -75,11 +75,11 @@ export default function AdminUsersPage() {
       header: 'User',
       render: (u) => (
         <div>
-          <Link to={`/admin/users/${u.id}`} className="font-medium text-slate-900 hover:text-brand-700">
+          <Link to={`/admin/users/${u.id}`} className="font-medium text-ink hover:text-gold-bright">
             {u.fullName}
           </Link>{' '}
-          {u.id === me.id && <span className="text-xs font-normal text-slate-500">(you)</span>}
-          <p className="text-xs text-slate-500">{u.email}</p>
+          {u.id === me.id && <span className="text-xs font-normal text-ink-3">(you)</span>}
+          <p className="text-xs text-ink-3">{u.email}</p>
         </div>
       ),
     },
@@ -94,14 +94,14 @@ export default function AdminUsersPage() {
       header: 'Onboarding',
       render: (u) =>
         u.role !== 'ACCOUNT_HOLDER' ? (
-          <span className="text-xs text-slate-400">—</span>
+          <span className="text-xs text-ink-3">—</span>
         ) : u.onboardingStatus === 'APPROVED' ? (
           <Badge tone="success">Onboarded</Badge>
         ) : (
           <Badge tone="warning">Pending</Badge>
         ),
     },
-    { key: 'createdAt', header: 'Joined', render: (u) => <span className="text-slate-500">{formatDate(u.createdAt)}</span> },
+    { key: 'createdAt', header: 'Joined', render: (u) => <span className="text-ink-3">{formatDate(u.createdAt)}</span> },
     {
       key: 'actions',
       header: <span className="sr-only">Actions</span>,
@@ -121,7 +121,7 @@ export default function AdminUsersPage() {
       <PageHeader title="Users" description="Everyone who can sign in to LedgerLine." />
       <Card>
         <form
-          className="flex flex-col gap-3 border-b border-slate-100 p-4 md:flex-row md:items-end"
+          className="flex flex-col gap-3 border-b border-line-soft p-4 md:flex-row md:items-end"
           onSubmit={(event) => {
             event.preventDefault()
             update({ q: search.trim() })
@@ -154,12 +154,12 @@ export default function AdminUsersPage() {
           <p>
             {pending.isActive ? (
               <>
-                <strong className="text-slate-900">{pending.fullName}</strong> ({pending.email}) will be signed out immediately and will not be able to sign in.
+                <strong className="text-ink">{pending.fullName}</strong> ({pending.email}) will be signed out immediately and will not be able to sign in.
                 Their accounts and balances are not changed.
               </>
             ) : (
               <>
-                <strong className="text-slate-900">{pending.fullName}</strong> ({pending.email}) will be able to sign in again.
+                <strong className="text-ink">{pending.fullName}</strong> ({pending.email}) will be able to sign in again.
               </>
             )}
           </p>

@@ -1,19 +1,38 @@
 @import "tailwindcss";
 
-/* Design tokens. Tailwind v4 turns these into utilities:
-   --color-brand-600 → bg-brand-600, text-brand-600, border-brand-600, ... */
+/* LedgerLine Black & Gold design tokens. Tailwind v4 turns each --color-* into utilities:
+   --color-gold → bg-gold, text-gold, border-gold, ring-gold/30, …
+   The app is dark-only: every surface, text and status colour comes from this list – no slate/blue/white leftovers. */
 @theme {
-  --color-brand-50: #eef3ff;
-  --color-brand-100: #dbe5ff;
-  --color-brand-200: #bccdff;
-  --color-brand-300: #8eaafd;
-  --color-brand-400: #5b7ff8;
-  --color-brand-500: #3659f0;
-  --color-brand-600: #1d3fbf;
-  --color-brand-700: #1a339a;
-  --color-brand-800: #1a2e7a;
-  --color-brand-900: #172659;
-  --color-brand-950: #0d1636;
+  /* Surfaces (darkest → lightest) */
+  --color-canvas: #090a0b;    /* main application background */
+  --color-sidebar: #0b0c0d;   /* sidebar */
+  --color-surface: #101112;   /* page surface, table headers, quiet panels */
+  --color-card: #171717;      /* cards */
+  --color-elevated: #1d1b17;  /* elevated cards, hover, skeletons */
+  --color-field: #202020;     /* inputs */
+  --color-line: #34312a;      /* default border */
+  --color-line-soft: #26241f; /* dividers inside cards */
+
+  /* Gold */
+  --color-gold: #d4a63a;        /* primary metallic gold */
+  --color-gold-bright: #f7d477; /* champagne – links on hover, highlights */
+  --color-gold-soft: #e8bc55;   /* links, icons */
+  --color-gold-deep: #9b7429;   /* gradient end, quiet gold borders */
+  --color-gold-dark: #342914;   /* dark gold surface (icon tiles, active states) */
+  --color-gold-line: #b88a32;   /* gold borders */
+
+  /* Text */
+  --color-ink: #f7f7f5;   /* primary */
+  --color-ink-2: #b7b7b7; /* secondary */
+  --color-ink-3: #858585; /* muted */
+  --color-ink-4: #5e5e5e; /* disabled / decorative only (not for essential text) */
+  --color-on-gold: #101010;
+
+  /* Status */
+  --color-success: #4cd47b;
+  --color-danger: #f16e65;
+  --color-warning: #e5ac43;
 
   /* System fonts: fast, no external requests. */
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -22,15 +41,65 @@
 
 @layer base {
   html {
-    @apply bg-slate-50 text-slate-900 antialiased;
+    color-scheme: dark; /* native controls (date pickers, scrollbars, <select> menus) render dark */
+    @apply bg-canvas text-ink antialiased;
   }
 
   body {
-    @apply min-h-screen font-sans;
+    @apply min-h-screen bg-canvas font-sans;
+  }
+
+  ::selection {
+    background: color-mix(in srgb, var(--color-gold) 35%, transparent);
+    color: var(--color-ink);
   }
 
   /* Visible keyboard focus everywhere (accessibility). */
   :focus-visible {
-    @apply outline-2 outline-offset-2 outline-brand-500;
+    @apply outline-2 outline-offset-2 outline-gold-soft;
+  }
+
+  /* Native dropdown options follow the dark theme. */
+  option {
+    background-color: var(--color-field);
+    color: var(--color-ink);
+  }
+
+  dialog {
+    @apply bg-card text-ink;
+  }
+}
+
+/* Reusable finishes from the reference design. */
+@utility gold-gradient {
+  background-image: linear-gradient(115deg, #f7d477 0%, #e8bc55 35%, #d4a63a 70%, #9b7429 100%);
+}
+
+@utility surface-gradient {
+  background-image: linear-gradient(145deg, #1d1b17 0%, #111213 55%, #090a0b 100%);
+}
+
+/* The premium balance card: dark gold glow with a soft highlight along the lower edge. */
+@utility balance-gradient {
+  background-image:
+    radial-gradient(120% 70% at 85% 120%, rgb(212 166 58 / 0.55) 0%, rgb(212 166 58 / 0) 60%),
+    linear-gradient(135deg, #3a2c12 0%, #241b0c 45%, #120e07 100%);
+}
+
+/* Soft curved gold light behind the sign-in and registration pages. */
+@utility auth-glow {
+  background-image:
+    radial-gradient(60% 32% at 50% 82%, rgb(212 166 58 / 0.2) 0%, rgb(212 166 58 / 0) 100%),
+    radial-gradient(35% 22% at 18% 88%, rgb(155 116 41 / 0.16) 0%, rgb(155 116 41 / 0) 100%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

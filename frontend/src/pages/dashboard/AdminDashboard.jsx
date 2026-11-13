@@ -15,6 +15,7 @@ import TransactionsTable from '../../components/domain/TransactionsTable'
 import AuditLogTable from '../../components/domain/AuditLogTable'
 import LedgerIntegrityCard from '../../components/domain/LedgerIntegrityCard'
 import AuditIntegrityCard from '../../components/domain/AuditIntegrityCard'
+import { AlertCircleIcon, BankIcon, CheckCircleIcon, KeyIcon, ListIcon, UserIcon, UsersIcon, WalletIcon } from '../../components/icons'
 
 // ADMIN home: one server-side overview (GET /api/admin/overview) plus the live ledger check,
 // the latest money movements and the latest refusals.
@@ -53,16 +54,18 @@ export default function AdminDashboard() {
 
       <section aria-label="Users">
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <StatCard label="Users" value={o?.users.total} hint={o ? `${o.users.active} active · ${o.users.inactive} deactivated` : undefined} />
-          <StatCard label="Account holders" value={o?.users.byRole.ACCOUNT_HOLDER.active} hint="Active" />
+          <StatCard label="Users" icon={UsersIcon} value={o?.users.total} hint={o ? `${o.users.active} active · ${o.users.inactive} deactivated` : undefined} />
+          <StatCard label="Account holders" icon={UserIcon} value={o?.users.byRole.ACCOUNT_HOLDER.active} hint="Active" />
           <StatCard
             label="Onboarding pending"
+            icon={CheckCircleIcon}
             value={o?.users.pendingOnboarding}
             hint="Registered, profile not yet submitted"
             tone={o?.users.pendingOnboarding ? 'warning' : 'default'}
           />
           <StatCard
             label="Staff"
+            icon={KeyIcon}
             value={o ? o.users.byRole.ADMIN.active + o.users.byRole.AUDITOR.active : undefined}
             hint={o ? `${o.users.byRole.ADMIN.active} admins · ${o.users.byRole.AUDITOR.active} auditors${o.users.passwordChangePending ? ` · ${o.users.passwordChangePending} temporary password` : ''}` : undefined}
           />
@@ -71,10 +74,10 @@ export default function AdminDashboard() {
 
       <section aria-label="Money" className="mt-4">
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <StatCard label="Customer accounts" value={o?.accounts.total} hint={o ? `${o.accounts.active} active · ${o.accounts.frozen} frozen · ${o.accounts.closed} closed` : undefined} />
-          <StatCard label="Customer funds" value={o?.customerFunds.formatted} hint="Sum of all customer balances" />
-          <StatCard label="Transactions" value={o?.transactions.total} hint={o ? `${o.transactions.last24h} in the last 24 hours` : undefined} />
-          <StatCard label="Refused attempts" value={o?.refusedLast24h} hint="Last 24 hours" tone={o?.refusedLast24h ? 'danger' : 'default'} />
+          <StatCard label="Customer accounts" icon={WalletIcon} value={o?.accounts.total} hint={o ? `${o.accounts.active} active · ${o.accounts.frozen} frozen · ${o.accounts.closed} closed` : undefined} />
+          <StatCard label="Customer funds" icon={BankIcon} value={o?.customerFunds.formatted} hint="Sum of all customer balances" />
+          <StatCard label="Transactions" icon={ListIcon} value={o?.transactions.total} hint={o ? `${o.transactions.last24h} in the last 24 hours` : undefined} />
+          <StatCard label="Refused attempts" icon={AlertCircleIcon} value={o?.refusedLast24h} hint="Last 24 hours" tone={o?.refusedLast24h ? 'danger' : 'default'} />
         </div>
       </section>
 
@@ -84,7 +87,7 @@ export default function AdminDashboard() {
             title="Recent admin actions"
             description="Status and role changes, new staff, account freezes"
             action={
-              <Link to="/audit-logs" className="text-sm font-medium text-brand-600 hover:text-brand-700">
+              <Link to="/audit-logs" className="text-sm font-medium text-gold-soft hover:text-gold-bright">
                 Audit log →
               </Link>
             }
@@ -95,21 +98,21 @@ export default function AdminDashboard() {
           <CardHeader title="Newest users" description="The latest sign-ups and staff accounts" />
           <CardBody>
             {!o ? (
-              <div className="h-24 animate-pulse rounded bg-slate-100" />
+              <div className="h-24 animate-pulse rounded bg-elevated" />
             ) : (
-              <ul className="divide-y divide-slate-100">
+              <ul className="divide-y divide-line-soft">
                 {o.recentSignups.map((u) => (
                   <li key={u.id} className="flex items-center justify-between gap-3 py-2.5 text-sm">
                     <div className="min-w-0">
-                      <Link to={`/admin/users/${u.id}`} className="font-medium text-slate-900 hover:text-brand-700">
+                      <Link to={`/admin/users/${u.id}`} className="font-medium text-ink hover:text-gold-bright">
                         {u.fullName}
                       </Link>
-                      <p className="truncate text-xs text-slate-500">{u.email}</p>
+                      <p className="truncate text-xs text-ink-3">{u.email}</p>
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
                       {u.role === 'ACCOUNT_HOLDER' && u.onboardingStatus !== 'APPROVED' && <Badge tone="warning">Onboarding</Badge>}
                       <Badge tone={u.role === 'ACCOUNT_HOLDER' ? 'neutral' : 'brand'}>{ROLE_LABELS[u.role] ?? u.role}</Badge>
-                      <span className="text-xs text-slate-500">{formatDate(u.createdAt)}</span>
+                      <span className="text-xs text-ink-3">{formatDate(u.createdAt)}</span>
                     </div>
                   </li>
                 ))}
@@ -135,7 +138,7 @@ export default function AdminDashboard() {
           title="Recent refused attempts"
           description="Actions the system blocked"
           action={
-            <Link to="/audit-logs?outcome=REFUSED" className="text-sm font-medium text-brand-600 hover:text-brand-700">
+            <Link to="/audit-logs?outcome=REFUSED" className="text-sm font-medium text-gold-soft hover:text-gold-bright">
               View all →
             </Link>
           }

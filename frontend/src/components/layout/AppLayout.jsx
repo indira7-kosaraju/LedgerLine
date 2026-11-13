@@ -5,7 +5,7 @@ import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../../hooks/useToast'
 import { navItemsFor } from '../../config/navigation'
 import { ROLE_LABELS } from '../../config/roles'
-import { CloseIcon, MenuIcon } from '../icons'
+import { CloseIcon, LogoutIcon, MenuIcon } from '../icons'
 import { cn } from '../../utils/cn'
 import Logo from '../Logo'
 import Button from '../ui/Button'
@@ -22,12 +22,12 @@ function SidebarContent({ onNavigate }) {
   }
 
   return (
-    <div className="flex h-full flex-col bg-brand-950 text-slate-300">
-      <div className="flex h-16 items-center px-5">
-        <Logo light />
+    <div className="flex h-full flex-col border-r border-line-soft bg-sidebar text-ink-2">
+      <div className="flex h-20 items-center border-b border-line-soft px-6">
+        <Logo />
       </div>
 
-      <nav className="flex-1 space-y-1 px-3 py-4" aria-label="Main">
+      <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-5" aria-label="Main">
         {navItemsFor(user).map(({ to, label, icon: Icon }) => (
           <NavLink
             key={to}
@@ -35,24 +35,38 @@ function SidebarContent({ onNavigate }) {
             onClick={onNavigate}
             className={({ isActive }) =>
               cn(
-                'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-                isActive ? 'bg-white/10 text-white' : 'hover:bg-white/5 hover:text-white',
+                'group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition',
+                isActive
+                  ? 'gold-gradient text-on-gold shadow-[0_8px_22px_-12px_rgb(212_166_58/0.8)]'
+                  : 'text-ink-2 hover:bg-elevated hover:text-ink',
               )
             }
           >
-            <Icon className="size-5 shrink-0" />
-            {label}
+            {({ isActive }) => (
+              <>
+                <Icon className={cn('size-5 shrink-0', isActive ? 'text-on-gold' : 'text-gold-soft/80 group-hover:text-gold-soft')} />
+                {label}
+              </>
+            )}
           </NavLink>
         ))}
       </nav>
 
-      <div className="border-t border-white/10 p-4">
-        <p className="truncate text-sm font-medium text-white">{user.fullName}</p>
-        <p className="truncate text-xs text-slate-400">{user.email}</p>
-        <span className="mt-2 inline-block rounded-full bg-white/10 px-2 py-0.5 text-xs font-medium text-slate-200">
+      <div className="border-t border-line-soft p-4">
+        <div className="flex items-center gap-3">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-full border border-gold-deep bg-gold-dark/60 text-sm font-semibold text-gold-soft" aria-hidden="true">
+            {user.fullName.trim().charAt(0).toUpperCase()}
+          </span>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium text-ink">{user.fullName}</p>
+            <p className="truncate text-xs text-ink-3">{user.email}</p>
+          </div>
+        </div>
+        <span className="mt-3 inline-block rounded-full bg-gold-dark/60 px-2 py-0.5 text-xs font-medium text-gold-soft ring-1 ring-inset ring-gold-deep/60">
           {ROLE_LABELS[user.role] ?? user.role}
         </span>
-        <Button variant="secondary" size="sm" className="mt-4 w-full" onClick={handleLogout} loading={signingOut}>
+        <Button variant="secondary" size="md" className="mt-4 w-full" onClick={handleLogout} loading={signingOut}>
+          {!signingOut && <LogoutIcon className="size-4" />}
           Sign out
         </Button>
       </div>
@@ -75,7 +89,7 @@ export default function AppLayout() {
   }, [menuOpen])
 
   return (
-    <div className="min-h-screen lg:pl-64">
+    <div className="min-h-screen bg-canvas lg:pl-64">
       {/* Desktop sidebar */}
       <aside className="hidden lg:fixed lg:inset-y-0 lg:left-0 lg:block lg:w-64">
         <SidebarContent />
@@ -84,9 +98,9 @@ export default function AppLayout() {
       {/* Mobile slide-out menu */}
       {menuOpen && (
         <div className="fixed inset-0 z-40 lg:hidden" role="dialog" aria-modal="true" aria-label="Main menu">
-          <div className="absolute inset-0 bg-slate-900/50" onClick={closeMenu} aria-hidden="true" />
+          <div className="absolute inset-0 bg-black/70" onClick={closeMenu} aria-hidden="true" />
           <aside className="absolute inset-y-0 left-0 w-72 max-w-[85%]">
-            <button type="button" onClick={closeMenu} className="absolute right-3 top-4 z-10 rounded-md p-1.5 text-slate-300 hover:bg-white/10" aria-label="Close menu">
+            <button type="button" onClick={closeMenu} className="absolute right-3 top-6 z-10 rounded-md p-1.5 text-ink-2 hover:bg-elevated hover:text-ink" aria-label="Close menu">
               <CloseIcon />
             </button>
             <SidebarContent onNavigate={closeMenu} />
@@ -94,14 +108,14 @@ export default function AppLayout() {
         </div>
       )}
 
-      <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-slate-200 bg-white/90 px-4 backdrop-blur sm:px-6 lg:px-8">
-        <button type="button" onClick={() => setMenuOpen(true)} className="rounded-md p-2 text-slate-600 hover:bg-slate-100 lg:hidden" aria-label="Open menu">
+      <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-line-soft bg-canvas/85 px-4 backdrop-blur sm:px-6 lg:px-8">
+        <button type="button" onClick={() => setMenuOpen(true)} className="rounded-md p-2 text-gold-soft hover:bg-elevated lg:hidden" aria-label="Open menu">
           <MenuIcon />
         </button>
         <div className="lg:hidden">
           <Logo />
         </div>
-        <span className="ml-auto rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-800 ring-1 ring-inset ring-amber-200">
+        <span className="ml-auto rounded-full bg-gold-dark/50 px-3 py-1 text-xs font-medium text-gold-soft ring-1 ring-inset ring-gold-deep/60">
           Simulated money
         </span>
       </header>

@@ -9,15 +9,15 @@ import { formatDateTime } from '../../utils/format'
 // entry columns for narrow dashboard cards – Debit/Credit already show the direction.
 export default function LedgerEntriesTable({ items = [], loading, showAccount = true, showReference = true, compact = false, empty = 'No ledger entries yet.' }) {
   const columns = [
-    { key: 'entryNumber', header: '#', render: (e) => <span className="font-mono text-xs text-slate-500">{e.entryNumber}</span> },
-    { key: 'createdAt', header: 'Time', render: (e) => <span className="text-slate-600">{formatDateTime(e.createdAt)}</span> },
+    { key: 'entryNumber', header: '#', render: (e) => <span className="font-mono text-xs text-ink-3">{e.entryNumber}</span> },
+    { key: 'createdAt', header: 'Time', render: (e) => <span className="text-ink-2">{formatDateTime(e.createdAt)}</span> },
     showAccount && { key: 'accountNumber', header: 'Account', render: (e) => <span className="font-mono text-xs">{e.accountNumber}</span> },
     showReference && {
       key: 'reference',
       header: 'Reference',
       render: (e) =>
         e.transaction && (
-          <Link to={`/transactions/${e.transaction.id}`} className="font-mono text-xs font-medium text-brand-700 hover:underline">
+          <Link to={`/transactions/${e.transaction.id}`} className="font-mono text-xs font-medium text-gold-soft hover:underline">
             {e.transaction.reference}
           </Link>
         ),
@@ -26,7 +26,7 @@ export default function LedgerEntriesTable({ items = [], loading, showAccount = 
     !compact && {
       key: 'counterparty',
       header: 'Counterparty',
-      render: (e) => <span className="font-mono text-xs text-slate-500">{e.counterpartyAccountNumber ?? '—'}</span>,
+      render: (e) => <span className="font-mono text-xs text-ink-3">{e.counterpartyAccountNumber ?? '—'}</span>,
     },
     !compact && {
       key: 'direction',
@@ -37,19 +37,19 @@ export default function LedgerEntriesTable({ items = [], loading, showAccount = 
       key: 'debit',
       header: 'Debit',
       align: 'right',
-      render: (e) => (e.direction === 'DEBIT' ? <span className="tabular-nums text-rose-700">{e.amount.formatted}</span> : <span className="text-slate-300">—</span>),
+      render: (e) => (e.direction === 'DEBIT' ? <span className="tabular-nums text-danger">{e.amount.formatted}</span> : <span className="text-ink-2">—</span>),
     },
     {
       key: 'credit',
       header: 'Credit',
       align: 'right',
-      render: (e) => (e.direction === 'CREDIT' ? <span className="tabular-nums text-emerald-700">{e.amount.formatted}</span> : <span className="text-slate-300">—</span>),
+      render: (e) => (e.direction === 'CREDIT' ? <span className="tabular-nums text-success">{e.amount.formatted}</span> : <span className="text-ink-2">—</span>),
     },
     {
       key: 'balanceAfter',
       header: 'Balance after',
       align: 'right',
-      render: (e) => <span className="font-medium tabular-nums text-slate-900">{e.balanceAfter.formatted}</span>,
+      render: (e) => <span className="font-medium tabular-nums text-ink">{e.balanceAfter.formatted}</span>,
     },
   ].filter(Boolean)
 

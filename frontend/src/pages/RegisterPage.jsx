@@ -57,7 +57,7 @@ export default function RegisterPage() {
       footer={
         <>
           Already have an account?{' '}
-          <Link to="/login" state={location.state} className="font-medium text-brand-600 hover:text-brand-700">
+          <Link to="/login" state={location.state} className="font-medium text-gold-soft hover:text-gold-bright">
             Sign in
           </Link>
         </>
@@ -94,7 +94,7 @@ export default function RegisterPage() {
         <Button type="submit" className="w-full" loading={submitting}>
           {submitting ? 'Creating account…' : 'Create account'}
         </Button>
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-ink-3">
           New accounts are account holders. Administrator and auditor accounts are created by the system operator.
         </p>
       </form>

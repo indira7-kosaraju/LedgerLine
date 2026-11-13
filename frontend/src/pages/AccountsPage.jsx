@@ -56,17 +56,17 @@ function AllAccounts() {
       render: (a) =>
         a.owner ? (
           <div>
-            <p className="text-slate-900">{a.owner.fullName}</p>
-            <p className="text-xs text-slate-500">{a.owner.email}</p>
+            <p className="text-ink">{a.owner.fullName}</p>
+            <p className="text-xs text-ink-3">{a.owner.email}</p>
           </div>
         ) : (
-          <span className="text-slate-500">LedgerLine system</span>
+          <span className="text-ink-3">LedgerLine system</span>
         ),
     },
     { key: 'type', header: 'Type', render: (a) => humanize(a.type) },
     { key: 'status', header: 'Status', render: (a) => <AccountStatusBadge status={a.status} /> },
-    { key: 'balance', header: 'Balance', align: 'right', render: (a) => <span className="font-medium tabular-nums text-slate-900">{a.balance.formatted}</span> },
-    { key: 'createdAt', header: 'Opened', render: (a) => <span className="text-slate-500">{formatDate(a.createdAt)}</span> },
+    { key: 'balance', header: 'Balance', align: 'right', render: (a) => <span className="font-medium tabular-nums text-ink">{a.balance.formatted}</span> },
+    { key: 'createdAt', header: 'Opened', render: (a) => <span className="text-ink-3">{formatDate(a.createdAt)}</span> },
   ]
 
   return (
@@ -75,7 +75,7 @@ function AllAccounts() {
 
       <Card>
         <form
-          className="flex flex-col gap-3 border-b border-slate-100 p-4 md:flex-row md:items-end"
+          className="flex flex-col gap-3 border-b border-line-soft p-4 md:flex-row md:items-end"
           onSubmit={(event) => {
             event.preventDefault()
             update({ q: search.trim() })
@@ -108,9 +108,9 @@ function AllAccounts() {
         </form>
 
         {accounts.data && (
-          <p className="border-b border-slate-100 px-4 py-2 text-xs text-slate-500">
+          <p className="border-b border-line-soft px-4 py-2 text-xs text-ink-3">
             {accounts.data.total} account{accounts.data.total === 1 ? '' : 's'} · customer balances in this view total{' '}
-            <span className="font-medium tabular-nums text-slate-700">{accounts.data.summary.totalBalance.formatted}</span>
+            <span className="font-medium tabular-nums text-ink-2">{accounts.data.summary.totalBalance.formatted}</span>
           </p>
         )}
 
@@ -157,7 +157,7 @@ function MyAccounts() {
       />
       <ErrorState error={accounts.error} onRetry={accounts.reload} className="mb-6" />
       {needsOnboarding(user) && <OnboardingNotice className="mb-6" />}
-      {accounts.data?.items.length === 0 && !needsOnboarding(user) && <p className="text-sm text-slate-500">You don&apos;t have any accounts yet.</p>}
+      {accounts.data?.items.length === 0 && !needsOnboarding(user) && <p className="text-sm text-ink-3">You don&apos;t have any accounts yet.</p>}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {accounts.data?.items.map((account) => (
           <AccountCard key={account.id} account={account} />

@@ -12,10 +12,11 @@ import AuditLogTable from '../../components/domain/AuditLogTable'
 import LedgerEntriesTable from '../../components/domain/LedgerEntriesTable'
 import LedgerIntegrityCard from '../../components/domain/LedgerIntegrityCard'
 import AuditIntegrityCard from '../../components/domain/AuditIntegrityCard'
+import { AlertCircleIcon, BookIcon, CheckCircleIcon, ListIcon } from '../../components/icons'
 
 function ViewAll({ to }) {
   return (
-    <Link to={to} className="text-sm font-medium text-brand-600 hover:text-brand-700">
+    <Link to={to} className="text-sm font-medium text-gold-soft hover:text-gold-bright">
       View all →
     </Link>
   )
@@ -40,15 +41,19 @@ export default function AuditorDashboard() {
 
       <ErrorState error={transactions.error || ledger.error || refusedTxns.error} className="mb-6" />
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Transactions" value={transactions.data?.total} />
-        <StatCard label="Ledger entries" value={ledger.data?.total} hint="2 per transaction" />
+      <AuditIntegrityCard result={auditIntegrity} variant="hero" />
+
+      <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard label="Transactions" icon={ListIcon} value={transactions.data?.total} />
+        <StatCard label="Ledger entries" icon={BookIcon} value={ledger.data?.total} hint="2 per transaction" />
         <StatCard
+          icon={AlertCircleIcon}
           label="Refused transaction attempts"
           value={refusedTxns.data?.total}
           tone={refusedTxns.data?.total ? 'danger' : 'default'}
         />
         <StatCard
+          icon={CheckCircleIcon}
           label="Books"
           value={integrity.data ? (integrity.data.ok ? 'Balanced' : 'Problem') : undefined}
           tone={integrity.data ? (integrity.data.ok ? 'success' : 'danger') : 'default'}
@@ -63,7 +68,6 @@ export default function AuditorDashboard() {
         </Card>
         <div className="space-y-6">
           <LedgerIntegrityCard result={integrity} />
-          <AuditIntegrityCard result={auditIntegrity} />
         </div>
       </div>
 

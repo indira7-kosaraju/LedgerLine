@@ -18,7 +18,7 @@ function direction(txn, ownAccountIds) {
 }
 
 function AccountRef({ account }) {
-  return <span className="font-mono text-xs text-slate-600">{account.accountNumber ?? '—'}</span>
+  return <span className="font-mono text-xs text-ink-2">{account.accountNumber ?? '—'}</span>
 }
 
 // ownAccountIds: Set of the viewer's account ids (account holders) – omit for admin/auditor.
@@ -31,18 +31,18 @@ export default function TransactionsTable({ items = [], loading, ownAccountIds, 
       // In compact mode the date is the link to the details page (the reference column is hidden).
       render: (t) =>
         compact ? (
-          <Link to={`/transactions/${t.id}`} className="text-brand-700 hover:underline">
+          <Link to={`/transactions/${t.id}`} className="text-gold-soft hover:underline">
             {formatDateTime(t.createdAt)}
           </Link>
         ) : (
-          <span className="text-slate-600">{formatDateTime(t.createdAt)}</span>
+          <span className="text-ink-2">{formatDateTime(t.createdAt)}</span>
         ),
     },
     !compact && {
       key: 'reference',
       header: 'Reference',
       render: (t) => (
-        <Link to={`/transactions/${t.id}`} className="font-mono text-xs font-medium text-brand-700 hover:underline">
+        <Link to={`/transactions/${t.id}`} className="font-mono text-xs font-medium text-gold-soft hover:underline">
           {t.reference}
         </Link>
       ),
@@ -54,12 +54,12 @@ export default function TransactionsTable({ items = [], loading, ownAccountIds, 
       render: (t) => (
         <span className="inline-flex items-center gap-1.5">
           <AccountRef account={t.fromAccount} />
-          <span className="text-slate-400">→</span>
+          <span className="text-ink-3">→</span>
           <AccountRef account={t.toAccount} />
         </span>
       ),
     },
-    !compact && { key: 'description', header: 'Description', render: (t) => <span className="text-slate-500">{t.description ?? '—'}</span> },
+    !compact && { key: 'description', header: 'Description', render: (t) => <span className="text-ink-3">{t.description ?? '—'}</span> },
     {
       key: 'amount',
       header: 'Amount',
@@ -67,7 +67,7 @@ export default function TransactionsTable({ items = [], loading, ownAccountIds, 
       render: (t) => {
         const d = direction(t, ownAccountIds)
         return (
-          <span className={cn('font-medium tabular-nums', d === 'in' && 'text-emerald-700', d === 'out' && 'text-rose-700', d !== 'in' && d !== 'out' && 'text-slate-900')}>
+          <span className={cn('font-medium tabular-nums', d === 'in' && 'text-success', d === 'out' && 'text-danger', d !== 'in' && d !== 'out' && 'text-ink')}>
             {d === 'in' ? '+' : d === 'out' ? '−' : ''}
             {t.amount.formatted}
           </span>
@@ -80,7 +80,7 @@ export default function TransactionsTable({ items = [], loading, ownAccountIds, 
 
 export function AccountLink({ account }) {
   return (
-    <Link to={`/accounts/${account.id}`} className="font-mono text-sm font-medium text-brand-700 hover:text-brand-800 hover:underline">
+    <Link to={`/accounts/${account.id}`} className="font-mono text-sm font-medium text-gold-soft hover:text-gold-bright hover:underline">
       {account.accountNumber}
     </Link>
   )

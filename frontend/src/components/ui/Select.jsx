@@ -8,7 +8,7 @@ export default function Select({ label, options, error, hint, className, srOnlyL
   const message = error || hint
   return (
     <div className={className}>
-      <label htmlFor={id} className={cn('block text-sm font-medium text-slate-700', srOnlyLabel ? 'sr-only' : 'mb-1.5')}>
+      <label htmlFor={id} className={cn('block text-sm font-medium text-ink', srOnlyLabel ? 'sr-only' : 'mb-1.5')}>
         {label}
       </label>
       <select
@@ -16,8 +16,8 @@ export default function Select({ label, options, error, hint, className, srOnlyL
         aria-invalid={error ? true : undefined}
         aria-describedby={message ? messageId : undefined}
         className={cn(
-          'block h-10 w-full rounded-lg border bg-white px-3 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus-visible:outline-none',
-          error ? 'border-rose-300 focus:border-rose-500 focus:ring-rose-500/20' : 'border-slate-300 focus:border-brand-500 focus:ring-brand-500/20',
+          'block h-11 w-full rounded-lg border bg-field px-3 text-sm text-ink focus:outline-none focus:ring-2 focus-visible:outline-none',
+          error ? 'border-danger/60 focus:border-danger focus:ring-danger/25' : 'border-line hover:border-gold-deep/70 focus:border-gold focus:ring-gold/25',
         )}
         {...props}
       >
@@ -28,7 +28,7 @@ export default function Select({ label, options, error, hint, className, srOnlyL
         ))}
       </select>
       {message && (
-        <p id={messageId} className={cn('mt-1.5 text-sm', error ? 'text-rose-600' : 'text-slate-500')}>
+        <p id={messageId} className={cn('mt-1.5 text-sm', error ? 'text-danger' : 'text-ink-3')}>
           {message}
         </p>
       )}

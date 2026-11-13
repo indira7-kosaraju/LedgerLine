@@ -122,11 +122,11 @@ export default function AdminStaffPage() {
       header: 'Staff member',
       render: (u) => (
         <div>
-          <Link to={`/admin/users/${u.id}`} className="font-medium text-slate-900 hover:text-brand-700">
+          <Link to={`/admin/users/${u.id}`} className="font-medium text-ink hover:text-gold-bright">
             {u.fullName}
           </Link>{' '}
-          {u.id === me.id && <span className="text-xs text-slate-500">(you)</span>}
-          <p className="text-xs text-slate-500">{u.email}</p>
+          {u.id === me.id && <span className="text-xs text-ink-3">(you)</span>}
+          <p className="text-xs text-ink-3">{u.email}</p>
         </div>
       ),
     },
@@ -156,7 +156,7 @@ export default function AdminStaffPage() {
     {
       key: 'createdAt',
       header: 'Since',
-      render: (u) => <span className="text-slate-500">{formatDate(u.createdAt)}</span>,
+      render: (u) => <span className="text-ink-3">{formatDate(u.createdAt)}</span>,
     },
     {
       key: 'actions',
@@ -203,7 +203,7 @@ export default function AdminStaffPage() {
 
       <Card>
         <form
-          className="flex flex-col gap-3 border-b border-slate-100 p-4 md:flex-row md:items-end"
+          className="flex flex-col gap-3 border-b border-line-soft p-4 md:flex-row md:items-end"
           onSubmit={(event) => {
             event.preventDefault()
             update({ q: search.trim() })
@@ -243,7 +243,7 @@ export default function AdminStaffPage() {
               error={errors.currentPassword}
               autoComplete="current-password"
             />
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-ink-3">
               A temporary password is generated and shown once. The new staff member must change it at the first sign-in.
             </p>
           </div>
@@ -261,10 +261,10 @@ export default function AdminStaffPage() {
         {created && (
           <div className="space-y-3">
             <p>
-              <strong className="text-slate-900">{created.user.fullName}</strong> ({created.user.email}) is now {ROLE_LABELS[created.user.role]}.
+              <strong className="text-ink">{created.user.fullName}</strong> ({created.user.email}) is now {ROLE_LABELS[created.user.role]}.
             </p>
             <Alert tone="warning" title="Temporary password – shown only now">
-              <code className="block select-all break-all rounded bg-white px-2 py-1 font-mono text-base text-slate-900" data-testid="temporary-password">
+              <code className="block select-all break-all rounded bg-card px-2 py-1 font-mono text-base text-ink" data-testid="temporary-password">
                 {created.temporaryPassword}
               </code>
               <span className="mt-2 block">
@@ -288,7 +288,7 @@ export default function AdminStaffPage() {
         {roleChange && (
           <div className="space-y-4">
             <p>
-              <strong className="text-slate-900">{roleChange.user.fullName}</strong> becomes <strong>{ROLE_LABELS[roleChange.role]}</strong>. All of their
+              <strong className="text-ink">{roleChange.user.fullName}</strong> becomes <strong>{ROLE_LABELS[roleChange.role]}</strong>. All of their
               current sessions end.
             </p>
             <Input

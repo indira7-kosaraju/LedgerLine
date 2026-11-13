@@ -1,10 +1,13 @@
 import { cn } from '../../utils/cn'
 
+// Black & Gold buttons: metallic gold primary, gold-outlined secondary.
 const VARIANTS = {
-  primary: 'bg-brand-600 text-white hover:bg-brand-700 disabled:bg-brand-300',
-  secondary: 'bg-white text-slate-700 ring-1 ring-inset ring-slate-300 hover:bg-slate-50 disabled:text-slate-400',
-  ghost: 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 disabled:text-slate-300',
-  danger: 'bg-rose-600 text-white hover:bg-rose-700 disabled:bg-rose-300',
+  primary:
+    'gold-gradient font-semibold text-on-gold shadow-[0_10px_28px_-14px_rgb(212_166_58/0.75)] hover:brightness-110 active:brightness-95 disabled:opacity-50 disabled:hover:brightness-100',
+  secondary:
+    'bg-transparent text-gold-soft ring-1 ring-inset ring-gold-deep hover:bg-gold-dark/50 hover:text-gold-bright hover:ring-gold-line disabled:text-ink-4 disabled:ring-line disabled:hover:bg-transparent',
+  ghost: 'text-ink-2 hover:bg-elevated hover:text-ink disabled:text-ink-4',
+  danger: 'bg-danger font-semibold text-on-gold hover:bg-danger/85 disabled:opacity-50',
 }
 
 const SIZES = {
@@ -16,7 +19,7 @@ const SIZES = {
 // Shared by <Button> and by router <Link>s that should look like buttons.
 export function buttonClasses(variant = 'primary', size = 'md', className) {
   return cn(
-    'inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg font-medium transition-colors disabled:cursor-not-allowed',
+    'inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg font-medium transition disabled:cursor-not-allowed',
     VARIANTS[variant],
     SIZES[size],
     className,
