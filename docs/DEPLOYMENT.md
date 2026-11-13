@@ -3,12 +3,11 @@
 **Target:** frontend on **Vercel**, backend on **Render**, database on **Neon** (managed PostgreSQL). All three have free plans.
 Simulated money only – never use real banking data.
 
-**Current deployment (verified 2026-11-12):** frontend <https://ledger-line-umber.vercel.app> · backend
+**Current deployment (verified 2026-11-13, commit `c5833a0`):** frontend <https://ledger-line-umber.vercel.app> · backend
 <https://ledgerline-z5o2.onrender.com> · Neon PostgreSQL 18 · Render Key Value (Redis). The API connects as `ledgerline_api`.
-Steps 2–4 (limited database role, Redis rate limits + readiness, onboarding) are deployed and verified – see the "Production
-verification" sections at the end (step 4: `verify-db` 15/15, `verify-deployment` 27/27).
-**Steps 5 (admin dashboard, user and staff management) and 6 (audit integrity and security) are implemented and tested locally but
-not deployed yet** – they go out together; see "Deploying steps 5 and 6 together" at the end.
+Steps 2–6 (limited database role, Redis rate limits + readiness, onboarding, admin dashboard with user and staff management, audit
+integrity and security) are deployed and verified – see the "Production verification" sections at the end (latest, steps 5 + 6:
+`verify-db` 17/17, `verify-deployment` 29/29, audit hash chain intact through record #170).
 
 ```
 Browser ──https──▶ <app>.vercel.app ──┬─ /, /dashboard, …  → React app (static files on Vercel)
@@ -384,3 +383,75 @@ After a successful deploy and a few days of normal operation, delete the `pre-st
 Migration 1 was also rehearsed on its own (rollback script first, then the migration: all data identical, 16/16); production was
 checked read-only during step 5: 0 staff own customer accounts, 1 active admin, migration not applied. In the app afterwards:
 **Staff → Add staff member** creates further administrators/auditors; the temporary password is shown once.
+
+## Production verification – steps 5 and 6 (step 7, 2026-11-13)
+
+Steps 5 and 6 were deployed together as described in "Deploying steps 5 and 6 together". **Deployed commit: `c5833a0`.**
+
+**Pre-flight (read-only, 2026-11-12):**
+- **Readiness:** all `ok`.
+- **Migrations:** exactly 5 applied, the last being `customer_onboarding`; none of the step 5/6 columns, triggers or functions existed yet.
+- **Data:** 0 staff-owned customer accounts, 1 active admin, 140 audit records.
+- **Database checks:** the 15 step 4 checks passed as `ledgerline_api`, and only `ledgerline_api` was connected.
+- **Snapshot:** a data snapshot (counts and fingerprints) was saved for the comparison.
+
+**Backup:** the owner created the Neon branch `pre-step56` from production (current point in time) before migrating.
+
+**Migration:** the owner ran `npm run db:prepare:production`, without `--with-demo`.
+- Both `20261112180000_staff_management` and `20261112210000_audit_hash_chain` were applied successfully, followed by `verify-db` 17/17.
+- After that, `c5833a0` was pushed and went Live on Render and Vercel.
+
+### Read-only checks after the deployment
+
+| Check | Result |
+|---|---|
+| `GET /api/health/ready` | ✅ 200: `database`, `redis`, `schema` and `dbRole` all `ok` |
+| `verify-db` as `ledgerline_api` | ✅ 17/17 |
+| `GET /api/admin/overview`, `/api/admin/staff`, `/api/audit-logs/verify` without signing in | ✅ 401 (an unknown route gives 404, so the step 5/6 routes exist) |
+| Migrations | ✅ 7 applied, all finished, none rolled back; the 4 new triggers installed |
+| Audit hash chain | ✅ 140 records chained in their original order (#1–#140), none unchained, `audit_chain_problems()` empty |
+| Frontend | ✅ `/admin`, `/admin/users`, `/admin/staff` and `/audit-logs` are served; the live bundle contains the staff management and audit integrity pages |
+| Existing data compared with the pre-flight snapshot | ✅ counts and all fingerprints identical (users and password hashes, transactions, ledger running balances, audit record IDs, account balances) |
+
+### Live checks (with approval)
+
+`npm run verify:deployment -- https://ledger-line-umber.vercel.app` → **✅ 29/29**. It covers:
+- registration with the step 6 password rules, and onboarding;
+- deposits, withdrawals and transfers, idempotency and concurrency;
+- roles: a holder cannot open the admin overview or staff list (403), the auditor cannot move money (403), the public demo admin cannot log in (401);
+- the ledger check, and the audit hash chain check (as the auditor).
+
+Afterwards:
+- `verify-db` passed 17/17 again, and readiness was all `ok`.
+- **The audit hash chain is intact through record #170.**
+  - The run added records #141–#170, and #141 links to the previous head #140.
+  - The head is #170, hash `cf06099e7708bd3b…`.
+  - `audit_chain_problems()` returned nothing.
+
+Compared with a snapshot taken just before the run:
+- **Unchanged:** all earlier users, transactions, ledger entries and audit records.
+- **Customer balances:** the existing customer accounts are unchanged, still totalling ₹22,970.00.
+- **SYSTEM account:** it was the only earlier account to change, moving by −₹1,100 net. It is the counterparty of the test deposits (₹2,000) and withdrawals (₹900).
+- **Staff:** no staff records were created or changed.
+
+| Records added by the run | Before → after |
+|---|---|
+| Users (one `deploy-check-…@example.com` account holder, onboarding approved) | 9 → **10** |
+| Staff (admins and auditors, including the deactivated demo admin) | 3 → 3 |
+| Customer profiles | 1 → 2 |
+| Accounts | 16 → **19** |
+| Transactions (2 deposits, 2 withdrawals, 2 transfers) | 40 → **46** |
+| Ledger entries | 80 → 92 |
+| Idempotency keys | 41 → 49 |
+| Audit records | 140 → **170** |
+
+**Final production counts:** 10 users, 19 accounts, 46 transactions, 170 audit records. Money is conserved (all balances sum to ₹0).
+
+**Not tested in production:** the admin-side actions.
+- **Why:** the live checks never sign in as the real administrator, whose password is private.
+- **What that leaves out:** creating staff, changing roles, deactivating or reactivating users, signing a user out everywhere, and opening user details.
+- **Where they are covered:** the local tests, which passed (backend 436/436 including 30 admin management and 21 audit/security tests, Playwright 35/35).
+
+**Next:**
+- Keep the chain head (#170, `cf06099e7708bd3b…`) in your own notes, and compare it with `/api/audit-logs/verify` now and then.
+- After a few days of normal operation, delete the `pre-step4` and `pre-step56` Neon branches.

@@ -56,7 +56,7 @@ LedgerLine is a learning project that implements these guarantees end to end and
   - 16 frontend unit tests
   - a 61-check smoke test
   - a 17-check database verifier
-  - a 25-check deployment verifier
+  - a 29-check deployment verifier
 - **Documentation:** [README](../README.md), [API reference](API.md), [threat model](../THREATS.md), [security audit](SECURITY_AUDIT.md),
   [deployment guide](DEPLOYMENT.md), and an [AI prompt log](../PROMPTS.md) with 22 entries.
 - **Deployment setup:** frontend on Vercel (`/api/*` rewritten to the backend so the session cookie stays on the same site), backend on
@@ -136,7 +136,7 @@ The lesson: AI output has to be proven by tests and by the real running system, 
 
 ## What is not finished
 
-**Verified on the live deployment (2026-11-12):**
+**Verified on the live deployment (2026-11-12; steps 5 and 6 on 2026-11-13):**
 - Frontend https://ledger-line-umber.vercel.app, backend https://ledgerline-z5o2.onrender.com, database on Neon.
 - `/api/health` returns 200 with the database `ok`, directly and through Vercel's `/api` rewrite.
 - The API runs as the limited `ledgerline_api` role: it is the only app connection on Neon, and as that role PostgreSQL refuses disabling
@@ -145,14 +145,24 @@ The lesson: AI output has to be proven by tests and by the real running system, 
 - `verify-deployment`: 25 of 25 live checks passed – security headers, logins and roles, the secure cookie, deposit, withdrawal,
   transfer, history, idempotency (replay, 5 simultaneous duplicates, reused key), the concurrent-withdrawal race and a balanced ledger.
 - The public demo admin is disabled; the real first admin was created with `admin:bootstrap`.
-
-**Not verified yet:**
 - **Step 3 is live and verified (2026-11-12):** readiness reports database, Redis, ledger protections and the limited role as `ok`;
   25/25 live checks and 14/14 database checks passed. The login lockout itself was deliberately not triggered on production.
 - **Step 4 (onboarding) is live (2026-11-12):** migration applied, readiness all `ok`, 15/15 database checks; the frontend serves the
   onboarding page with the demo-data warning; the 27 live checks passed (1 test user, 3 accounts, 6 transactions added).
-- **Steps 5 and 6 (admin, users and staff; audit integrity and security):** built and tested locally (436 backend tests, 35 browser
-  tests); not deployed yet – they go out together after two migrations (see docs/DEPLOYMENT.md, "Deploying steps 5 and 6 together").
+- **Steps 5 and 6 (admin, users and staff; audit integrity and security) are live and verified (step 7, 2026-11-13):**
+  - Deployed together as commit `c5833a0`, after a Neon backup branch `pre-step56`.
+  - Both migrations were applied successfully (`staff_management`, `audit_hash_chain`).
+  - Readiness is all `ok`, and the admin and audit-verify endpoints refuse requests that are not signed in (401).
+  - 17/17 database checks and 29/29 live checks passed.
+  - The audit hash chain is intact through record #170.
+  - Existing customer balances are unchanged.
+  - Production now holds 10 users, 19 accounts, 46 transactions and 170 audit records.
+  - Details are in docs/DEPLOYMENT.md, "Production verification – steps 5 and 6".
+
+**Not verified yet:**
+- **Admin-side actions on production:** creating staff, changing roles, deactivating users, signing a user out everywhere and opening
+  user details were not exercised on the live site, because the live checks do not use the real admin's private password. They are
+  covered by the local tests, which passed (436 backend tests, 35 browser tests).
 - **Accepted:** 7 demo transactions were duplicated on production by a re-run of the demo seed (its idempotency keys had expired).
   Simulated money on demo accounts only; kept as they are (append-only ledger). The seed is fixed and production demo seeding is now
   opt-in (see docs/DEPLOYMENT.md).
