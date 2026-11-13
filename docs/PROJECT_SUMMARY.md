@@ -58,7 +58,7 @@ LedgerLine is a learning project that implements these guarantees end to end and
   - a 17-check database verifier
   - a 29-check deployment verifier
 - **Documentation:** [README](../README.md), [API reference](API.md), [threat model](../THREATS.md), [security audit](SECURITY_AUDIT.md),
-  [deployment guide](DEPLOYMENT.md), and an [AI prompt log](../PROMPTS.md) with 22 entries.
+  [deployment guide](DEPLOYMENT.md), and an [AI prompt log](../PROMPTS.md) with 29 entries.
 - **Deployment setup:** frontend on Vercel (`/api/*` rewritten to the backend so the session cookie stays on the same site), backend on
   Render (`render.yaml`), and database on Neon.
 
