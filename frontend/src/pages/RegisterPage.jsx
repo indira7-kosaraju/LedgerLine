@@ -52,15 +52,15 @@ export default function RegisterPage() {
 
   return (
     <AuthCard
-      title="Create your account"
-      subtitle="Create your sign-in, then complete a short onboarding to open accounts."
+      title="Create your LedgerLine account"
+      subtitle="Get started with secure, simulated-money banking."
       footer={
-        <>
+        <p className="text-center text-sm text-ink-2">
           Already have an account?{' '}
           <Link to="/login" state={location.state} className="font-medium text-gold-soft hover:text-gold-bright">
             Sign in
           </Link>
-        </>
+        </p>
       }
     >
       {formError && (
@@ -70,8 +70,24 @@ export default function RegisterPage() {
       )}
 
       <form onSubmit={handleSubmit} noValidate className="space-y-5">
-        <Input label="Full name" name="fullName" autoComplete="name" value={values.fullName} onChange={handleChange} error={errors.fullName} autoFocus />
-        <Input label="Email" name="email" type="email" autoComplete="email" value={values.email} onChange={handleChange} error={errors.email} />
+        <Input
+          label="Full name"
+          name="fullName"
+          autoComplete="name"
+          value={values.fullName}
+          onChange={handleChange}
+          error={errors.fullName}
+          autoFocus
+        />
+        <Input
+          label="Email address"
+          name="email"
+          type="email"
+          autoComplete="email"
+          value={values.email}
+          onChange={handleChange}
+          error={errors.email}
+        />
         <div>
           <PasswordInput
             label="Password"
@@ -91,11 +107,12 @@ export default function RegisterPage() {
           onChange={handleChange}
           error={errors.confirmPassword}
         />
-        <Button type="submit" className="w-full" loading={submitting}>
+        <Button type="submit" className="w-full" size="lg" loading={submitting}>
           {submitting ? 'Creating account…' : 'Create account'}
         </Button>
         <p className="text-xs text-ink-3">
-          New accounts are account holders. Administrator and auditor accounts are created by the system operator.
+          After signing up you complete a short onboarding before opening accounts. New accounts are account holders; administrator and auditor
+          accounts are created by the system operator.
         </p>
       </form>
     </AuthCard>
