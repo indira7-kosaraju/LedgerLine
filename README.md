@@ -266,7 +266,7 @@ The rules that matter most are enforced **by PostgreSQL**, not only by applicati
 | At commit, every changed balance equals its latest ledger balance | deferred `accounts_balance_matches_ledger` trigger |
 | A request is processed at most once | `UNIQUE(userId, key)` in the same transaction |
 
-**Verify any time:** `GET /api/ledger/verify` (admin/auditor) or `npm run verify:db` (14 read-only checks, e.g. all balances sum to ₹0,
+**Verify any time:** `GET /api/ledger/verify` (admin/auditor) or `npm run verify:db` (17 read-only checks, e.g. all balances sum to ₹0,
 every balance equals credits − debits). Tests use a separate, independent SQL checker (`backend/tests/invariants.js`).
 
 ## 12. API endpoints
@@ -393,8 +393,9 @@ The test tools refuse to run against any database that is not named `ledgerline_
 
 **Vercel** (frontend) · **Render** (backend) · **Neon** (managed PostgreSQL). Step-by-step guide: **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**.
 
-**Live demo:** <https://ledger-line-umber.vercel.app> (verified 2026-11-12 after step 3: 25/25 live checks, 14/14 database checks, readiness
-all `ok` – see docs/DEPLOYMENT.md. Step 4 – onboarding – is live as well: readiness `ok`, 15/15 database checks).
+**Live demo:** <https://ledger-line-umber.vercel.app>. Steps 5 and 6 (admin dashboard, user and staff management, audit integrity
+and security) are deployed (commit `c5833a0`) and were verified on 2026-11-13: 29/29 live checks, 17/17 database checks, the audit hash
+chain intact through record #170, and readiness all `ok`. Earlier steps were verified on 2026-11-12 (see docs/DEPLOYMENT.md).
 
 - `render.yaml` – Render Blueprint (build `npm ci --include=dev`, start `npm start` – migrations run from your computer, health check
   `/api/health/ready`, `REDIS_URL` from a Render Key Value instance).
@@ -484,7 +485,7 @@ multi-currency with exchange rates · CI pipeline running all test suites on eve
 | [docs/PROJECT_SUMMARY.md](docs/PROJECT_SUMMARY.md) | Short project write-up: problem, what was built, AI use, AI mistakes, what is not finished |
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Step-by-step deployment to Vercel, Render and Neon |
 | [docs/API.md](docs/API.md) | API reference: every endpoint, request, real response, error codes |
-| [THREATS.md](THREATS.md) | Threat model: 13 financial threats, protections, proving tests, accepted risks |
+| [THREATS.md](THREATS.md) | Threat model: 16 financial threats, protections, proving tests, accepted risks |
 | [docs/SECURITY_AUDIT.md](docs/SECURITY_AUDIT.md) | Day 3 security audit with the actual result of each attack |
 | [PROMPTS.md](PROMPTS.md) | AI usage log: prompts, what AI generated, what was wrong, how it was found and fixed |
 | [frontend/README.md](frontend/README.md) | Frontend structure and scripts |
